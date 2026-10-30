@@ -4,3 +4,5 @@
 .codi-chonky{flex:1;min-height:150px;position:relative}
 .codi-file-conflicts{padding:8px;max-height:130px;overflow:auto;background:#fff6e9}
 .codi-file-conflicts>div{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.codi-files-drive{padding:6px 8px;border-bottom:1px solid #ddd}.codi-files-drive select{padding:4px;max-width:100%}
+.codi-files-menu{position:fixed;z-index:10000;min-width:180px;display:flex;flex-direction:column;padding:4px;background:#fff;border:1px solid #aab3bc;box-shadow:0 4px 12px #0004}.codi-files-menu button{border:0;text-align:left;background:transparent;padding:8px 12px;cursor:pointer}.codi-files-menu button:hover,.codi-files-menu button:focus{background:#dbeafa}
