@@ -1,0 +1,6 @@
+.codi-files-create{display:flex;gap:6px;align-items:center;padding:8px;flex-wrap:wrap;border-bottom:1px solid #ddd}
+.codi-files-create input{min-width:120px;flex:1;padding:6px}
+.codi-files-create button,.codi-file-conflicts button{padding:6px 10px}
+.codi-chonky{flex:1;min-height:150px;position:relative}
+.codi-file-conflicts{padding:8px;max-height:130px;overflow:auto;background:#fff6e9}
+.codi-file-conflicts>div{display:flex;align-items:center;gap:6px;flex-wrap:wrap}

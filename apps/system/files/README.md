@@ -1,25 +1,12 @@
 # Files
 
-Browse temporary guest files or a signed-in account's private server files.
-Open documents through the shared desktop document context; Text owns editing.
-Successful saves refresh open Files listings through the existing shared service.
+The Files application uses the maintained Chonky React file-browser component.
+React and Chonky are bundled into this app and loaded only when Files opens.
+The host provides the registered account's browser/server mirror; Files does
+not access server folders directly. Opening a text file delegates to Text.
 
-“Word count on server” counts the saved UTF-8 document (up to 1 MiB), writes a
-separate private report and opens it in Text. Unsaved editor changes are not
-included. The server checks identity, read/create permission and source hash.
-An accepted operation survives closing Files. Reopening Files retrieves its
-saved report; repeating the same request returns that report. Closing a view
-or changing accounts prevents its delayed response from opening another app.
-
-The app owns no service process, account database or storage roots. It must not
-turn document content into shell commands. See CONTRIBUTING.md for navigation,
-lifecycle and storage contracts.
-
-The source candidate also adds **This browser**, an explicit device-local volume
-backed by the shared host browser-file service. It works for anonymous visitors,
-keeps account scopes separate, and survives the tested close/reopen workflow.
-Files opened here compose with Text and use optimistic version checks. Browser
-storage can be cleared or evicted; Keep browser files requests a real native
-persistence grant and reports denial honestly. Download important files.
-This volume is not the live Linux home or a server backup. Copy to Linux makes a
-separate temporary copy. See active-system/evidence/browser-files.md; not deployed.
+Users can browse, search, sort, change view, create files or folders, rename
+files using the context menu, and delete selected entries. Conflicts offer explicit choices. Synced files can be dragged into folders; moves are journaled locally and use a
+version-checked atomic server rename. Moving folders is not yet supported.
+Download is not offered. Each window
+unmounts its React root and unsubscribes from file changes when closed.
