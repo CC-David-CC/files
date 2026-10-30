@@ -10,3 +10,6 @@ files using the context menu, and delete selected entries. Conflicts offer expli
 version-checked atomic server rename. Moving folders is not yet supported.
 Download is not offered. Each window
 unmounts its React root and unsubscribes from file changes when closed.
+
+Files can import local files into account storage. PNG, JPEG, and WebP images
+open in Image Editor; text documents open in Text.
