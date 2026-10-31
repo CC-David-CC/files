@@ -13,3 +13,9 @@ unmounts its React root and unsubscribes from file changes when closed.
 
 Files can import local files into account storage. PNG, JPEG, and WebP images
 open in Image Editor; text documents open in Text.
+
+**Sync now** checks the server immediately for changes, including files changed
+outside the browser. Successful idle sessions check less often in the background;
+local changes still sync immediately. If the server is unavailable or busy,
+Files reports the pending/error state and retries; a browser save is not a
+guarantee that the server has received it.
