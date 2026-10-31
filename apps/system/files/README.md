@@ -18,3 +18,5 @@ open in Image Editor; text documents open in Text.
 outside the browser. Successful idle sessions check less often in the background;
 local changes still sync immediately. If the server is unavailable or busy,
 Files reports the pending/error state and retries; it does not claim a server check succeeded before the first successful sync. Manual sync errors clear after a successful automatic retry. A browser save is not a guarantee that the server has received it.
+
+On My files, **Extract ZIP** validates the archive and creates the destination tree together in browser storage. A changed ZIP or existing destination leaves the local tree unchanged. The resulting files and folders then sync individually, so server copies can be incomplete while sync is pending; simultaneous server-side folder creation may merge folders and conflicting files require resolution. Extraction into temporary Linux storage still proceeds item by item and can leave a partial folder on failure. Local desktop, emulated-phone and 4K and live emulated-phone account tests cover nested and empty folders, collisions, changed ZIPs and fresh-session recovery.
