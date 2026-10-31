@@ -17,5 +17,4 @@ open in Image Editor; text documents open in Text.
 **Sync now** checks the server immediately for changes, including files changed
 outside the browser. Successful idle sessions check less often in the background;
 local changes still sync immediately. If the server is unavailable or busy,
-Files reports the pending/error state and retries; a browser save is not a
-guarantee that the server has received it.
+Files reports the pending/error state and retries; it does not claim a server check succeeded before the first successful sync. Manual sync errors clear after a successful automatic retry. A browser save is not a guarantee that the server has received it.

@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';import {fileSyncMessage as message} from '../apps/system/files/sync-status.mjs';
+const s={pending:0,conflicts:0,error:null,lastSynced:null};
+assert.match(message({connected:false,status:null}),/Opening/);
+assert.match(message({connected:true,status:s}),/Checking server/);
+assert.match(message({connected:true,status:{...s,lastSynced:123}}),/checked with the server/);
+assert.match(message({connected:true,status:{...s,error:'Too many requests'}}),/Could not check the server/);
+assert.match(message({connected:true,status:{...s,error:'offline',pending:1}}),/kept on this device.*delayed/);
+assert.match(message({connected:true,status:{...s,pending:1}}),/waiting to sync/);
+assert.match(message({connected:true,status:{...s,conflicts:1}}),/attention/);
+assert.match(message({connected:true,status:{ephemeral:true}}),/resets on restart/);
+assert.equal(message({error:'Upload failed',connected:true,status:s}),'Upload failed');
+console.log('PASS truthful file synchronization messages');
