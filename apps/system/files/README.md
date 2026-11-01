@@ -59,3 +59,21 @@ Select one or more files and choose **Move to…** to pick their destination onc
 Select multiple files and choose **Copy to…** to copy them into one destination. Copies are separate operations: if one fails, the message reports how many were copied. Folders can be copied one at a time. Desktop and emulated-phone local tests and a live phone-sized account test cover two files, partial-failure reporting and sync. Physical touch remains unverified.
 
 After copying a temporary Linux file to My files, Files names the account copy and reports that it is syncing. The Linux original remains temporary; wait for a successful sync before relying on the server copy. Local desktop and emulated-phone tests use a real v86 guest, then confirm the account copy remains after guest reset. Physical touch remains unverified.
+
+Select one file and choose **Download** to save its current bytes to your
+computer. This is available for My files and temporary Linux files; a changed,
+missing or conflicting selection must be refreshed or resolved first. On
+phones, select a file and use Download in the toolbar.
+
+You can drop files from your computer into the Files area to upload them to the
+currently shown drive and folder. Existing account files prompt before
+replacement; dragging a folder in is not supported. The destination is checked
+again if the drive or folder changes during an upload. Upload and Download are
+separate from moving files within the desktop.
+
+Local desktop Chromium tests cover context-menu switching, actual downloaded
+bytes, a browser-protocol file drop, collision cancellation, folder rejection,
+internal movement after a drop and cleanup. Phone-sized tests cover the upload
+chooser and download; another test downloads actual temporary Linux bytes from
+v86. Physical phone interaction and an actual OS file-manager drag were not
+verified.

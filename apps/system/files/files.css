@@ -8,3 +8,4 @@
 .codi-files-touch-menu,.codi-files-sync,.codi-files-select-multiple{display:inline-block;min-height:44px;padding:6px 12px}.codi-files-select-multiple[aria-pressed=true]{background:#dbeafa;border-color:#24518a}
 @media (hover:none), (pointer:coarse), (max-width:600px){.codi-files-touch-menu{display:inline-block}}
 .codi-files-menu{position:fixed;z-index:10000;min-width:180px;display:flex;flex-direction:column;padding:4px;background:#fff;border:1px solid #aab3bc;box-shadow:0 4px 12px #0004}.codi-files-menu button{border:0;text-align:left;background:transparent;padding:8px 12px;cursor:pointer}.codi-files-menu button:hover,.codi-files-menu button:focus{background:#dbeafa}
+.codi-files-drop-overlay{position:absolute;inset:8px;z-index:1500;display:flex;align-items:center;justify-content:center;border:3px dashed #24518a;border-radius:8px;background:#dbeafaed;color:#173a65;font-weight:700;font-size:18px;pointer-events:none}
