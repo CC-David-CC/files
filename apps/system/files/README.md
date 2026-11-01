@@ -11,7 +11,7 @@ version-checked atomic server rename. Select one file or folder and choose **Cop
 Download is not offered. Each window
 unmounts its React root and unsubscribes from file changes when closed.
 
-The local candidate has a **Select multiple** mode: tap or click each item to
+Files has a **Select multiple** mode: tap or click each item to
 toggle its selection, then choose **Done selecting** before using an action.
 The current selection remains available after leaving the mode. This provides
 multi-selection without a physical Ctrl key. A multi-file upload or deletion
