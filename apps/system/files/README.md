@@ -55,3 +55,5 @@ For an account file, select **Open in Text** to inspect or edit UTF-8 text even 
 Uploading to My files asks before replacing an existing file. Skip preserves it; if the file changes while the question is open, the upload stops instead of overwriting the newer version. Multi-file uploads may have already completed earlier files when a later file fails.
 
 Select one or more files and choose **Move to…** to pick their destination once. Files move individually; if one fails, the message reports how many moved so you can inspect before retrying. Folder moves are not available. Desktop and emulated-phone local tests and a live phone-sized account test cover multi-file move and server sync. Physical touch remains unverified.
+
+Select multiple files and choose **Copy to…** to copy them into one destination. Copies are separate operations: if one fails, the message reports how many were copied. Folders can be copied one at a time. Desktop and emulated-phone local tests and a live phone-sized account test cover two files, partial-failure reporting and sync. Physical touch remains unverified.
