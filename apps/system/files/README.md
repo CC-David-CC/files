@@ -38,6 +38,8 @@ phone-sized account tests used mouse-driven dragging, including a collision.
 The Files build applies a narrow, hash-pinned Chonky 0.3.10 patch to keep a
 drag destination eligible when React DnD's animation-frame hover state is late.
 The actual drop still checks the innermost target. After installing the shared
-app-builder dependencies, run `python3 apps/system/files/prepare.py` before
-building Files. The preparer stages the reviewed dependency in ignored
+app-builder dependencies, the standard builder runs
+`python3 apps/system/files/prepare.py` automatically when Files is selected.
+Custom source or entry overlays must stage their dependencies themselves. The
+preparer stages the reviewed dependency in ignored
 `node_modules` and refuses an unexpected version or a modified staged copy.
