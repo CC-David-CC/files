@@ -8,8 +8,7 @@ not access server folders directly. Opening a text file delegates to Text.
 Users can browse, search, sort, change view, use New / Upload on desktop or touch screens to create files or folders or import a file, rename
 files using the toolbar or context menu, and delete selected entries. When versions conflict, save the device copy under a new name to keep both, then explicitly choose the device or server version; replacing either copy requires confirmation. Select one synced file and choose **Move to…** to pick a destination folder, or drag it into a folder; moves are journaled locally and use a
 version-checked atomic server rename. Select one file or folder and choose **Copy to…** to choose a destination and name for an independent copy. Folder copies include nested files and empty folders. The browser creates the local copy together, then synchronizes its contents individually; an interrupted sync can leave the server copy incomplete until it resumes. Existing local items are not replaced, and server file conflicts require resolution. If another device creates the same destination folder before syncing, its contents can be combined with the copy; conflicting files are retained for resolution. Moving folders is not yet supported.
-Download is not offered. Each window
-unmounts its React root and unsubscribes from file changes when closed.
+Each window unmounts its React root and unsubscribes from file changes when closed.
 
 Files has a **Select multiple** mode: tap or click each item to
 toggle its selection, then choose **Done selecting** before using an action.
@@ -77,3 +76,8 @@ internal movement after a drop and cleanup. Phone-sized tests cover the upload
 chooser and download; another test downloads actual temporary Linux bytes from
 v86. Physical phone interaction and an actual OS file-manager drag were not
 verified.
+
+Creating a file with an existing name leaves its contents untouched and asks
+the user to choose another name. Local desktop and emulated-phone account tests
+cover upload, create, open in Text, edit, save, sync and fresh-session reopen.
+Physical touch remains unverified.
