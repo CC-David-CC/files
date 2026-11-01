@@ -51,3 +51,5 @@ checks are not an atomic filesystem snapshot; changes after the last check may
 still be absent from the ZIP.
 
 For an account file, select **Open in Text** to inspect or edit UTF-8 text even when its normal Open action launches a different app. The Text editor rejects invalid UTF-8. The action is not offered for temporary Linux files; copy those into My files first.
+
+Uploading to My files asks before replacing an existing file. Skip preserves it; if the file changes while the question is open, the upload stops instead of overwriting the newer version. Multi-file uploads may have already completed earlier files when a later file fails.
