@@ -1,0 +1,16 @@
+{
+  "patches": [
+    {
+      "path": "node_modules/@samuelncui/chonky/dist/chonky.esm.js",
+      "sha256": "ddc9e11830d1f87df2be80d6b339f90713b0b803e59b3a13a6f8edca5df2abe1",
+      "find": "drop: r((t, n) => {\n\t\t\tif (n.canDrop()) return { dropTarget: e };\n\t\t}, [e]),",
+      "replace": "drop: r((t, o) => {\n\t\t\tif (o.canDrop() && (o.isOver({ shallow: !0 }) || n)) return { dropTarget: e };\n\t\t}, [e, n]),"
+    },
+    {
+      "path": "node_modules/@samuelncui/chonky/dist/chonky.esm.js",
+      "sha256": "ddc9e11830d1f87df2be80d6b339f90713b0b803e59b3a13a6f8edca5df2abe1",
+      "find": "if (i || t || !C.isDroppable(e) || !o.isOver({ shallow: !0 }) && !n) return !1;",
+      "replace": "if (i || t || !C.isDroppable(e)) return !1;"
+    }
+  ]
+}

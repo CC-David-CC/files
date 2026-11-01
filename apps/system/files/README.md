@@ -34,3 +34,10 @@ Empty files created in temporary Linux can be listed and explicitly copied to My
 A multi-file drag reports how many files moved if a later move fails; check
 the destination before retrying. Folder moves are not supported. Desktop and
 phone-sized account tests used mouse-driven dragging, including a collision.
+
+The Files build applies a narrow, hash-pinned Chonky 0.3.10 patch to keep a
+drag destination eligible when React DnD's animation-frame hover state is late.
+The actual drop still checks the innermost target. After installing the shared
+app-builder dependencies, run `python3 apps/system/files/prepare.py` before
+building Files. The preparer stages the reviewed dependency in ignored
+`node_modules` and refuses an unexpected version or a modified staged copy.
