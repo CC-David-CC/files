@@ -57,6 +57,15 @@ Select one or more files and choose **Move to…** to pick their destination onc
 
 Select multiple files and choose **Copy to…** to copy them into one destination. Copies are separate operations: if one fails, the message reports how many were copied. Folders can be copied one at a time. Desktop and emulated-phone local tests and a live phone-sized account test cover two files, partial-failure reporting and sync. Physical touch remains unverified.
 
+When copying one file, Files checks its version again immediately before
+creating the copy. If it changed while the destination was being checked,
+Files asks the user to select it again instead of copying the older snapshot.
+Local registered-account desktop and emulated-phone tests cover an uploaded
+file changing during that check, refusal, retry, opening the copy in Text,
+server sync, fresh-browser reopen, and a second account's isolation. The
+check and copy are not one atomic operation: a source change after the final
+check may still leave an older snapshot. Physical touch is unverified.
+
 After copying a temporary Linux file to My files, Files names the account copy and reports that it is syncing. The Linux original remains temporary; wait for a successful sync before relying on the server copy. Local desktop and emulated-phone tests use a real v86 guest, then confirm the account copy remains after guest reset. Physical touch remains unverified.
 
 Select one file and choose **Download** to save its current bytes to your
