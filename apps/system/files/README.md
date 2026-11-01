@@ -30,3 +30,7 @@ Files reports the pending/error state and retries; it does not claim a server ch
 On My files, **Extract ZIP** validates the archive and creates the destination tree together in browser storage. A changed ZIP or existing destination leaves the local tree unchanged. The resulting files and folders then sync individually, so server copies can be incomplete while sync is pending; simultaneous server-side folder creation may merge folders and conflicting files require resolution. Extraction into temporary Linux storage still proceeds item by item and can leave a partial folder on failure. Local desktop, emulated-phone and 4K and live emulated-phone account tests cover nested and empty folders, collisions, changed ZIPs and fresh-session recovery.
 
 Empty files created in temporary Linux can be listed and explicitly copied to My files; the copy persists after Linux restarts. Local desktop, emulated-phone and 4K, and live emulated-phone workflows tested shell-created and browser-created empty files. Linux home itself remains temporary.
+
+A multi-file drag reports how many files moved if a later move fails; check
+the destination before retrying. Folder moves are not supported. Desktop and
+phone-sized account tests used mouse-driven dragging, including a collision.

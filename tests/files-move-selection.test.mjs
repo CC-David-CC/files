@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {moveSelection} from '../apps/system/files/move-selection.mjs';
+const a={id:'/a',name:'a',version:'a1'},b={id:'/b',name:'b',version:'b1'},folder={id:'/folder',name:'folder',isDir:true};
+const calls=[];
+assert.equal(await moveSelection([a,b],'/target',async (...args)=>calls.push(args)),2);
+assert.deepEqual(calls,[['/a','/target/a','a1'],['/b','/target/b','b1']]);
+assert.equal(await moveSelection([a],'/',async()=>assert.fail()),0);
+await assert.rejects(moveSelection([a,b],'/target',async source=>{if(source==='/b')throw Error('Already exists.')}),/Move stopped\. 1 file was moved; check Files before retrying\. Already exists/);
+await assert.rejects(moveSelection([a,b,folder],'/target',async()=>{}),/2 files were moved/);
+await assert.rejects(moveSelection([folder],'/target',async()=>{}),/Moving folders is not available yet/);
+console.log('PASS multi-file moves report partial progress and preserve the failure');
