@@ -49,3 +49,5 @@ before writing the archive. If a change is detected during assembly, it asks
 the user to try again rather than knowingly saving a stale archive. These
 checks are not an atomic filesystem snapshot; changes after the last check may
 still be absent from the ZIP.
+
+For an account file, select **Open in Text** to inspect or edit UTF-8 text even when its normal Open action launches a different app. The Text editor rejects invalid UTF-8. The action is not offered for temporary Linux files; copy those into My files first.
