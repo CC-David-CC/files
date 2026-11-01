@@ -26,6 +26,16 @@ outside the browser. Successful idle sessions check less often in the background
 local changes still sync immediately. If the server is unavailable or busy,
 Files reports the pending/error state and retries; it does not claim a server check succeeded before the first successful sync. Manual sync errors clear after a successful automatic retry. A browser save is not a guarantee that the server has received it.
 
+If the gateway returns HTTP 429, pending local edits remain on the device and
+automatic retries use increasing, jittered delays capped at about two minutes
+before jitter. New edits queued during the failed attempt do not bypass that
+delay. Retries continue while the desktop remains open; browser storage can be
+cleared by the user or browser. Local registered-account desktop and emulated-
+phone tests forced the real isolated gateway's request-capacity response,
+checked repeated backoff and retained edits, then lifted the limit and verified
+automatic server sync and fresh-session reopening. The test accelerated timer
+intervals; physical devices and every failure mode were not verified.
+
 On My files, **Extract ZIP** validates the archive and creates the destination tree together in browser storage. A changed ZIP or existing destination leaves the local tree unchanged. The resulting files and folders then sync individually, so server copies can be incomplete while sync is pending; simultaneous server-side folder creation may merge folders and conflicting files require resolution. Extraction into temporary Linux storage still proceeds item by item and can leave a partial folder on failure. Local desktop, emulated-phone and 4K and live emulated-phone account tests cover nested and empty folders, collisions, changed ZIPs and fresh-session recovery.
 
 Empty files created in temporary Linux can be listed and explicitly copied to My files; the copy persists after Linux restarts. Local desktop, emulated-phone and 4K, and live emulated-phone workflows tested shell-created and browser-created empty files. Linux home itself remains temporary.
