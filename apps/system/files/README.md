@@ -43,3 +43,9 @@ app-builder dependencies, the standard builder runs
 Custom source or entry overlays must stage their dependencies themselves. The
 preparer stages the reviewed dependency in ignored
 `node_modules` and refuses an unexpected version or a modified staged copy.
+
+When creating a ZIP, Files rechecks the selected files and folder listings
+before writing the archive. If a change is detected during assembly, it asks
+the user to try again rather than knowingly saving a stale archive. These
+checks are not an atomic filesystem snapshot; changes after the last check may
+still be absent from the ZIP.
