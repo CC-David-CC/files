@@ -53,3 +53,5 @@ still be absent from the ZIP.
 For an account file, select **Open in Text** to inspect or edit UTF-8 text even when its normal Open action launches a different app. The Text editor rejects invalid UTF-8. The action is not offered for temporary Linux files; copy those into My files first.
 
 Uploading to My files asks before replacing an existing file. Skip preserves it; if the file changes while the question is open, the upload stops instead of overwriting the newer version. Multi-file uploads may have already completed earlier files when a later file fails.
+
+Select one or more files and choose **Move to…** to pick their destination once. Files move individually; if one fails, the message reports how many moved so you can inspect before retrying. Folder moves are not available. Desktop and emulated-phone local tests and a live phone-sized account test cover multi-file move and server sync. Physical touch remains unverified.
