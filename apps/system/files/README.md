@@ -102,3 +102,12 @@ Creating a file with an existing name leaves its contents untouched and asks
 the user to choose another name. Local desktop and emulated-phone account tests
 cover upload, create, open in Text, edit, save, sync and fresh-session reopen.
 Physical touch remains unverified.
+
+## Browser commands
+
+The signed-in desktop's in-page command registry offers `list` to page through
+My files and `open` to request opening a file in its associated application.
+The commands use the current account, exclude the temporary Linux drive, reject
+opening conflicts, and disappear when the Files window closes. An `open` result
+means the desktop was asked to open the file; the receiving app may still report
+an error. This is not a remote agent interface.
