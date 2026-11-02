@@ -106,8 +106,19 @@ Physical touch remains unverified.
 ## Browser commands
 
 The signed-in desktop's in-page command registry offers `list` to page through
-My files and `open` to request opening a file in its associated application.
+My files, `open` to request opening a file in its associated application, and
+`word-count` to request an account-authorized server word-count report for a
+particular listed file version. Select a UTF-8 text file in My files and choose
+**Count words on server** to use the same operation from the interface. It
+syncs first, checks the selected version, and counts the saved server copy (not
+unsaved editor changes). Files up to 1 MiB are supported. The report is saved
+beside the source and opens in Text once mirrored; if the return sync fails,
+Files reports its server path and the user can sync again. A request interrupted
+after submission may still have created a report.
 The commands use the current account, exclude the temporary Linux drive, reject
 opening conflicts, and disappear when the Files window closes. An `open` result
 means the desktop was asked to open the file; the receiving app may still report
-an error. This is not a remote agent interface.
+an error. This is not a remote agent interface. The word-count workflow has
+been tested locally with desktop and emulated-phone browsers and on the live
+site with an emulated phone, including a second account, stale-version refusal
+and retry; physical phone interaction has not been verified.
