@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {readDownloadSnapshot} from '../apps/system/files/download-snapshot.mjs';
+const original=new Blob([new Uint8Array([0,1,254,255])]);let fallback=0;
+const preferred={async readBlob(path){assert.equal(path,'/x');return {data:original,version:'v1',status:'pending'}},async read(){fallback++;throw Error('unexpected')}};
+assert.equal(await readDownloadSnapshot(preferred,'/x','v1'),original);assert.equal(fallback,0);
+const bytes={async read(){return {data:new Uint8Array([0,1,254,255]),version:'v1',status:'synced'}}};
+assert.deepEqual([...new Uint8Array(await(await readDownloadSnapshot(bytes,'/x','v1')).arrayBuffer())],[0,1,254,255]);
+await assert.rejects(()=>readDownloadSnapshot(preferred,'/x','older'),/changed/);
+await assert.rejects(()=>readDownloadSnapshot({async readBlob(){return {data:original,version:'v1',status:'conflict'}}},'/x','v1'),/conflict/);
+console.log('PASS download uses detached Blob or legacy bytes and rejects stale/conflicting snapshots');
