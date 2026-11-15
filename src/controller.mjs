@@ -61,6 +61,14 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       const destination = path((directory ? directory + '/' : '') + name);
       await files.rename(selected.path, destination, expectedRevision); check(); return confirmed({status: 'renamed', path: destination, committed: true}, 'Renamed on the server.');
     },
+    async move({path: value, destination, expectedRevision}) {
+      const selected = entry(value); if (selected.directory) throw Error('Folder moves are not enabled yet.');
+      const target = path(destination);
+      if (target === selected.path) throw Error('Choose a different destination.');
+      if (!/^[0-9a-f]{64}$/.test(expectedRevision || '')) throw TypeError('An exact selected file revision is required.');
+      await files.rename(selected.path, target, expectedRevision); check();
+      return confirmed({status: 'moved', path: target, committed: true}, 'Moved on the server.');
+    },
     async remove({path: value, expectedRevision}) {
       const selected = entry(value);
       if (!selected.directory && !/^[0-9a-f]{64}$/.test(expectedRevision || '')) throw TypeError('An exact selected file revision is required.');

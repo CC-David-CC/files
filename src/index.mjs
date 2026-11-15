@@ -9,15 +9,16 @@ const h = React.createElement;
 const Upload = defineFileAction({id: 'webos_upload', button: {name: 'Upload', toolbar: true, contextMenu: true, icon: ChonkyIconName.upload}});
 const NewFolder = defineFileAction({id: 'webos_new_folder', button: {name: 'New folder', toolbar: true, contextMenu: true, icon: ChonkyIconName.folder}});
 const Rename = defineFileAction({id: 'webos_rename', requiresSelection: true, button: {name: 'Rename', toolbar: true, contextMenu: true, icon: ChonkyIconName.text}});
+const Move = defineFileAction({id: 'webos_move', requiresSelection: true, button: {name: 'Move', toolbar: true, contextMenu: true, icon: ChonkyIconName.folder}});
 const Download = defineFileAction({id: 'webos_download', requiresSelection: true, button: {name: 'Download', toolbar: true, contextMenu: true, icon: ChonkyIconName.download}});
 const Remove = defineFileAction({id: 'webos_remove', requiresSelection: true, button: {name: 'Delete', toolbar: true, contextMenu: true, icon: ChonkyIconName.trash}});
 
-function ask({title, value, danger = false, signal}) {
+function ask({title, value, fieldLabel = 'Name', danger = false, signal}) {
   if (signal.aborted) return Promise.resolve(null);
   const dialog = document.createElement('dialog'), form = document.createElement('form'), heading = document.createElement('h2'), label = document.createElement('label'), input = document.createElement('input'), actions = document.createElement('div');
   dialog.className = 'webos-files-dialog'; heading.textContent = title; heading.id = 'files-dialog-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', heading.id);
   const cancel = document.createElement('button'), submit = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; submit.type = 'submit'; submit.textContent = danger ? 'Delete' : 'Continue';
-  if (value !== undefined) { label.textContent = 'Name'; input.value = value; input.required = true; label.append(input); form.append(label); }
+  if (value !== undefined) { label.textContent = fieldLabel; input.value = value; input.required = true; label.append(input); form.append(label); }
   actions.append(cancel, submit); form.prepend(heading); form.append(actions); dialog.append(form); document.body.append(dialog);
   return new Promise(resolve => {
     let done = false; const finish = result => { if (done) return; done = true; signal.removeEventListener('abort', abort); dialog.close(); dialog.remove(); resolve(result); };
@@ -42,13 +43,15 @@ function FilesView({controller, execute, signal, downloads}) {
   }
   async function action(event) {
     if (event.id === Upload.id) { upload.current?.click(); return; }
+    if (![ChonkyActions.OpenParentFolder.id, ChonkyActions.OpenFiles.id, NewFolder.id, Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
     await task(async () => {
       if (event.id === ChonkyActions.OpenParentFolder.id) return execute('list', {path: state.directory.split('/').slice(0, -1).join('/')});
       if (event.id === ChonkyActions.OpenFiles.id) { const item = event.payload?.targetFile || event.payload?.files?.[0]; if (item) return execute('open', {path: item.id}); return; }
       if (event.id === NewFolder.id) { const name = await ask({title: 'New folder', value: '', signal}); if (name !== null) await execute('mkdir', {name}); return; }
-      if (![Rename.id, Remove.id, Download.id].includes(event.id)) return;
+      if (![Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
       const item = await selected(event); if (signal.aborted) return;
       if (event.id === Rename.id) { const name = await ask({title: 'Rename ' + item.name, value: item.name, signal}); if (name !== null) await execute('rename', {path: item.path, name, expectedRevision: item.sha256}); }
+      if (event.id === Move.id) { const destination = await ask({title: 'Move ' + item.name, fieldLabel: 'Destination path in My files', value: item.path, signal}); if (destination !== null) await execute('move', {path: item.path, destination, expectedRevision: item.sha256}); }
       if (event.id === Remove.id) { if (await ask({title: 'Delete ' + item.name + ' from your account?', danger: true, signal})) await execute('remove', {path: item.path, expectedRevision: item.sha256}); }
       if (event.id === Download.id) {
         const result = await execute('download', {path: item.path, expectedRevision: item.sha256}); if (signal.aborted) return;
@@ -60,14 +63,15 @@ function FilesView({controller, execute, signal, downloads}) {
   }
   return h('div', {className: 'webos-files-view'},
     h('div', {className: 'webos-files-bar'}, h('strong', null, 'My files'), h('span', null, 'Account storage'),
-      h('button', {type: 'button', disabled: state.busy || pending, onClick: () => task(() => execute('list'))}, 'Refresh')),
+      h('button', {type: 'button', disabled: state.busy || pending, onClick: () => task(() => execute('list'))}, 'Refresh'),
+      h('button', {type: 'button', 'aria-label': 'Parent folder', disabled: !state.directory || state.busy || pending, onClick: () => task(() => execute('list', {path: state.directory.split('/').slice(0, -1).join('/')}))}, 'Up')),
     h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files', onChange: event => {
       const selected = [...event.target.files]; event.target.value = '';
       task(async () => { let completed = 0; try { for (const file of selected) { if (signal.aborted) return; await execute('import', {name: file.name, blob: new Blob([file])}); completed++; } }
         catch (error) { throw Object.assign(Error((completed ? completed + ' files saved before upload stopped. ' : '') + error.message), {outcome: error.outcome}); } });
     }}),
     h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending}, h(FullFileBrowser, {files, folderChain: chain, onFileAction: action,
-      iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, Rename, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true})),
+      iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true})),
     h('div', {className: 'webos-files-status', role: 'status'}, message || state.error || (state.busy || pending ? 'Working with the server…' : state.notice || 'Showing account files from the server.')));
 }
 
