@@ -87,9 +87,21 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       check();
       if (!request || request.instanceId !== instanceId || request.sessionId !== sessionId || !Object.hasOwn(ops, request.operation)) throw Error('Explicit current Files instance and session target required.');
       // Bytes are explicit operation input, never returned by ordinary inspect.
-      const operation = request.operation, args = {...request.args};
-      if (await authorize(authority, Object.freeze({instanceId, sessionId, operation, path: args.path || directory})) !== true) throw Error('Files operation denied.');
-      check(); if (busy) throw Error('A Files operation is already running.'); busy = true; error = ''; notice = ''; emit();
+      const operation = request.operation, args = {...request.args}, capturedDirectory = directory;
+      let destination = null;
+      if (operation === 'move') destination = path(args.destination);
+      if (['import', 'mkdir', 'rename'].includes(operation)) {
+        if (typeof args.name !== 'string' || args.name.includes('/')) throw TypeError('A file or folder name is required.');
+        destination = path((capturedDirectory ? capturedDirectory + '/' : '') + args.name);
+      }
+      if (await authorize(authority, Object.freeze({instanceId, sessionId, operation,
+        directory: capturedDirectory, path: args.path ?? capturedDirectory, destination,
+        expectedRevision: args.expectedRevision ?? null})) !== true) throw Error('Files operation denied.');
+      check();
+      // Folder-relative writes must not drift to a different resource while
+      // an asynchronous permission decision is pending.
+      if (directory !== capturedDirectory) throw Error('Files folder changed while authorization was pending.');
+      if (busy) throw Error('A Files operation is already running.'); busy = true; error = ''; notice = ''; emit();
       try { return await ops[operation](args); }
       catch (failure) { if (!disposed) { error = failure.message; if (failure.outcome === 'unknown') error += ' Check the server before retrying.'; } throw failure; }
       finally { busy = false; if (!disposed) emit(); }

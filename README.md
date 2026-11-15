@@ -11,3 +11,11 @@ The parent real-browser test verifies human upload, a second clean browser's lis
 Legacy recursive copy, archive/extraction, multi-selection workflows, background mirror/draft recovery, drag moves and server word-count are preserved but not yet ported into this interface. Drag/drop is disabled until its domain operations and reviewed dependency patch are integrated. Folder deletion follows the backend's empty-folder rule; folder moves remain unavailable. WordCraft opening is the next composition step. No live account data was copied or migrated.
 
 Move accepts a destination path relative to My files and uses Storage's revision-checked rename operation. It never implements a copy/delete substitute. Folder moves remain unsupported; destination collisions and permission checks are enforced by the server.
+
+Operation authorization receives the captured browsing directory, source path,
+computed destination (for import, mkdir, rename and move), and expected source
+revision. If navigation changes the directory while authorization waits, the
+pending operation is refused before Storage runs. A grant for one folder cannot
+follow a later navigation into another. Tests cover this race and policies that
+grant one destination while denying another. This is a local domain boundary;
+delegated server authentication remains a separate integration requirement.
