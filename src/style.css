@@ -3,3 +3,4 @@
 .webos-files-drop-overlay{position:absolute;inset:8px;z-index:1500;display:flex;align-items:center;justify-content:center;border:3px dashed #24518a;border-radius:8px;background:#dbeafaed;color:#173a65;font-weight:700;font-size:18px;pointer-events:none}
 
 .webos-files-upload{display:inline-flex;align-items:center;gap:6px;margin:0 8px;padding:6px 8px;border:0;background:transparent;color:#1976d2;font:inherit;cursor:pointer}.webos-files-upload:disabled{color:#aaa;cursor:default}.webos-files-upload svg{width:1em;height:1em}
+.webos-files-bar button[aria-pressed=true]{background:#dbeafa;border:1px solid #24518a}.webos-files-dialog ul{max-height:35vh;overflow:auto;overflow-wrap:anywhere;padding-left:24px}.webos-files-dialog p{max-width:440px}

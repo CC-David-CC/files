@@ -11,6 +11,19 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
   const inspect = () => ({instanceId, sessionId, directory, entries: structuredClone(entries), busy, disposed, error, notice, revision});
   const emit = () => { revision++; const s = inspect(); for (const listener of [...listeners]) listener(s); };
   const entry = value => { const p = path(value), found = entries.find(item => item.path === p); if (!found) throw Error('Refresh and select a file in this folder.'); return found; };
+  function removalTargets(args) {
+    if (args.items !== undefined && (args.path !== undefined || args.expectedRevision !== undefined)) throw TypeError('Specify one deletion selection.');
+    const items = args.items === undefined ? [{path: args.path, expectedRevision: args.expectedRevision}] : args.items;
+    if (!Array.isArray(items) || !items.length || items.length > 1024) throw TypeError('Select between 1 and 1024 items.');
+    const seen = new Set();
+    return Object.freeze(items.map(item => {
+      const selected = entry(item?.path);
+      if (seen.has(selected.path)) throw TypeError('A deletion selection cannot contain duplicates.');
+      seen.add(selected.path);
+      if (!selected.directory && !/^[0-9a-f]{64}$/.test(item.expectedRevision || '')) throw TypeError('An exact selected file revision is required.');
+      return Object.freeze({path: selected.path, expectedRevision: selected.directory ? null : item.expectedRevision});
+    }));
+  }
   async function refresh(destination = directory) {
     if (destination !== '') path(destination);
     const listing = await files.list(destination); check();
@@ -69,10 +82,24 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       await files.rename(selected.path, target, expectedRevision); check();
       return confirmed({status: 'moved', path: target, committed: true}, 'Moved on the server.');
     },
-    async remove({path: value, expectedRevision}) {
-      const selected = entry(value);
-      if (!selected.directory && !/^[0-9a-f]{64}$/.test(expectedRevision || '')) throw TypeError('An exact selected file revision is required.');
-      await files.remove(selected.path, selected.directory ? null : expectedRevision); check(); return confirmed({status: 'deleted', committed: true}, 'Deleted from your account.');
+    async remove({items}) {
+      const deletedPaths = [];
+      try {
+        for (const item of items) {
+          check(); await files.remove(item.path, item.expectedRevision);
+          // Record the acknowledgement before a close/session check. Never
+          // retry an interrupted mutation whose server outcome is unknown.
+          deletedPaths.push(item.path); check();
+        }
+      } catch (failure) {
+        const message = 'Confirmed deletion of ' + deletedPaths.length + ' of ' + items.length + ' items. Deletion stopped: ' + failure.message;
+        if (!disposed) {
+          try { await refresh(); } catch { /* The original mutation failure remains authoritative. */ }
+        }
+        throw Object.assign(Error(message), {cause: failure, outcome: failure.outcome, deletedPaths, deletedCount: deletedPaths.length, total: items.length});
+      }
+      return confirmed({status: 'deleted', committed: true, deletedPaths, deletedCount: deletedPaths.length, total: items.length},
+        items.length === 1 ? 'Deleted from your account.' : 'Deleted ' + deletedPaths.length + ' items from your account.');
     },
     async download({path: value, expectedRevision}) {
       const selected = entry(value); if (selected.directory) throw Error('Choose a file.');
@@ -88,6 +115,9 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       if (!request || request.instanceId !== instanceId || request.sessionId !== sessionId || !Object.hasOwn(ops, request.operation)) throw Error('Explicit current Files instance and session target required.');
       // Bytes are explicit operation input, never returned by ordinary inspect.
       const operation = request.operation, args = {...request.args}, capturedDirectory = directory;
+      // Capture and validate the entire selection before any asynchronous
+      // authorization. A caller cannot substitute targets during that wait.
+      if (operation === 'remove') args.items = removalTargets(args);
       if (operation === 'import' && args.expectedDirectory !== undefined && args.expectedDirectory !== capturedDirectory) throw Error('The destination folder changed. Choose Upload again in the destination folder.');
       let destination = null;
       if (operation === 'move') destination = path(args.destination);
@@ -95,9 +125,14 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
         if (typeof args.name !== 'string' || args.name.includes('/')) throw TypeError('A file or folder name is required.');
         destination = path((capturedDirectory ? capturedDirectory + '/' : '') + args.name);
       }
-      if (await authorize(authority, Object.freeze({instanceId, sessionId, operation,
-        directory: capturedDirectory, path: args.path ?? capturedDirectory, destination,
-        expectedRevision: args.expectedRevision ?? null})) !== true) throw Error('Files operation denied.');
+      const targets = operation === 'remove' ? args.items : [{path: args.path ?? capturedDirectory, expectedRevision: args.expectedRevision ?? null}];
+      // Every selected resource must be authorized before the first write.
+      for (const target of targets) {
+        if (await authorize(authority, Object.freeze({instanceId, sessionId, operation,
+          directory: capturedDirectory, path: target.path, destination,
+          expectedRevision: target.expectedRevision})) !== true) throw Error('Files operation denied.');
+        check();
+      }
       check();
       // Folder-relative writes must not drift to a different resource while
       // an asynchronous permission decision is pending.

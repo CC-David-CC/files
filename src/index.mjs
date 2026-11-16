@@ -11,14 +11,20 @@ const NewFolder = defineFileAction({id: 'webos_new_folder', button: {name: 'New 
 const Rename = defineFileAction({id: 'webos_rename', requiresSelection: true, button: {name: 'Rename', toolbar: true, contextMenu: true, icon: ChonkyIconName.text}});
 const Move = defineFileAction({id: 'webos_move', requiresSelection: true, button: {name: 'Move', toolbar: true, contextMenu: true, icon: ChonkyIconName.folder}});
 const Download = defineFileAction({id: 'webos_download', requiresSelection: true, button: {name: 'Download', toolbar: true, contextMenu: true, icon: ChonkyIconName.download}});
-const Remove = defineFileAction({id: 'webos_remove', requiresSelection: true, button: {name: 'Delete', toolbar: true, contextMenu: true, icon: ChonkyIconName.trash}});
+const Remove = defineFileAction({id: 'webos_remove', requiresSelection: true, hotkeys: ['delete'], button: {name: 'Delete', toolbar: true, contextMenu: true, icon: ChonkyIconName.trash}});
 
-function ask({title, value, fieldLabel = 'Name', danger = false, signal}) {
+function ask({title, value, fieldLabel = 'Name', danger = false, items, signal}) {
   if (signal.aborted) return Promise.resolve(null);
   const dialog = document.createElement('dialog'), form = document.createElement('form'), heading = document.createElement('h2'), label = document.createElement('label'), input = document.createElement('input'), actions = document.createElement('div');
   dialog.className = 'webos-files-dialog'; heading.textContent = title; heading.id = 'files-dialog-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', heading.id);
   const cancel = document.createElement('button'), submit = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; submit.type = 'submit'; submit.textContent = danger ? 'Delete' : 'Continue';
   if (value !== undefined) { label.textContent = fieldLabel; input.value = value; input.required = true; label.append(input); form.append(label); }
+  if (items) {
+    const list = document.createElement('ul');
+    for (const item of items) { const li = document.createElement('li'); li.textContent = item.name + (item.directory ? ' (folder)' : ''); list.append(li); }
+    form.append(list);
+    if (items.some(item => item.directory)) { const note = document.createElement('p'); note.textContent = 'Only empty folders can be deleted. Deletion stops if an item cannot be deleted.'; form.append(note); }
+  }
   actions.append(cancel, submit); form.prepend(heading); form.append(actions); dialog.append(form); document.body.append(dialog);
   return new Promise(resolve => {
     let done = false; const finish = result => { if (done) return; done = true; signal.removeEventListener('abort', abort); dialog.close(); dialog.remove(); resolve(result); };
@@ -30,7 +36,7 @@ function ask({title, value, fieldLabel = 'Name', danger = false, signal}) {
 }
 
 function FilesView({controller, execute, signal, downloads}) {
-  const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false);
+  const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false), [multiSelect, setMultiSelect] = useState(false);
   const upload = useRef(null), uploadTarget = useRef(null), taskActive = useRef(false);
   useEffect(() => controller.subscribe(setState), [controller]);
   useEffect(() => {
@@ -111,10 +117,18 @@ function FilesView({controller, execute, signal, downloads}) {
       if (event.id === ChonkyActions.OpenFiles.id) { const item = event.payload?.targetFile || event.payload?.files?.[0]; if (item) return item.id === '/' ? execute('list', {path: ''}) : execute('open', {path: item.id}); return; }
       if (event.id === NewFolder.id) { const name = await ask({title: 'New folder', value: '', signal}); if (name !== null) await execute('mkdir', {name}); return; }
       if (![Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
+      if (event.id === Remove.id) {
+        const selection = [...(event.state?.selectedFilesForAction || event.state?.selectedFiles || [])];
+        if (!selection.length) throw Error('Select files or folders to delete.');
+        const items = [];
+        for (const item of selection) { items.push(await execute('snapshot', {path: item.id})); if (signal.aborted) return; }
+        const title = items.length === 1 ? 'Delete ' + items[0].name + ' from your account?' : 'Delete ' + items.length + ' items from your account?';
+        if (await ask({title, items, danger: true, signal})) await execute('remove', {items: items.map(item => ({path: item.path, expectedRevision: item.sha256}))});
+        return;
+      }
       const item = await selected(event); if (signal.aborted) return;
       if (event.id === Rename.id) { const name = await ask({title: 'Rename ' + item.name, value: item.name, signal}); if (name !== null) await execute('rename', {path: item.path, name, expectedRevision: item.sha256}); }
       if (event.id === Move.id) { const destination = await ask({title: 'Move ' + item.name, fieldLabel: 'Destination path in My files', value: item.path, signal}); if (destination !== null) await execute('move', {path: item.path, destination, expectedRevision: item.sha256}); }
-      if (event.id === Remove.id) { if (await ask({title: 'Delete ' + item.name + ' from your account?', danger: true, signal})) await execute('remove', {path: item.path, expectedRevision: item.sha256}); }
       if (event.id === Download.id) {
         const result = await execute('download', {path: item.path, expectedRevision: item.sha256}); if (signal.aborted) return;
         const url = URL.createObjectURL(new Blob([result.data])), link = document.createElement('a'); link.href = url; link.download = result.name; link.hidden = true; document.body.append(link);
@@ -125,6 +139,15 @@ function FilesView({controller, execute, signal, downloads}) {
   }
   const status = message || state.error || (state.busy || pending ? 'Working with the server…' : state.notice || 'Showing account files from the server.');
   return h('div', {className: 'webos-files-view',
+    onClickCapture: event => {
+      if (!multiSelect || taskActive.current || controller.inspect().busy) return;
+      const row = event.target.closest?.('[data-chonky-context-file-id]');
+      if (!row || !event.currentTarget.contains(row) || event.target.closest('button,a[href],[role=button],input')) return;
+      event.preventDefault(); event.stopPropagation(); row.focus({preventScroll: true});
+      // Use Chonky's public keyboard interaction: Space toggles one item
+      // without clearing the rest of this view's selection.
+      row.dispatchEvent(new KeyboardEvent('keydown', {key: ' ', code: 'Space', bubbles: true, cancelable: true}));
+    },
     onDragEnterCapture: event => { if (!externalFiles(event)) return; event.preventDefault(); if (!taskActive.current && !controller.inspect().busy) setDropActive(true); },
     onDragOverCapture: event => { if (!externalFiles(event)) return; event.preventDefault(); event.dataTransfer.dropEffect = taskActive.current || controller.inspect().busy ? 'none' : 'copy'; },
     onDragLeaveCapture: event => { if (!event.currentTarget.contains(event.relatedTarget)) setDropActive(false); },
@@ -134,13 +157,14 @@ function FilesView({controller, execute, signal, downloads}) {
       uploadFiles([...event.dataTransfer.files || []], controller.inspect().directory);
     }},
     h('div', {className: 'webos-files-bar'}, h('strong', null, 'My files'), h('span', null, 'Account storage'),
+      h('button', {type: 'button', 'aria-pressed': multiSelect, disabled: state.busy || pending, onClick: () => setMultiSelect(value => !value)}, multiSelect ? 'Done selecting' : 'Select multiple'),
       h('button', {type: 'button', disabled: state.busy || pending, onClick: () => task(() => execute('list'))}, 'Refresh'),
       h('button', {type: 'button', 'aria-label': 'Parent folder', disabled: !state.directory || state.busy || pending, onClick: () => task(() => execute('list', {path: state.directory.split('/').slice(0, -1).join('/')}))}, 'Up')),
     h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files'}),
     h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
       h(FileBrowser, {files, folderChain: chain, onFileAction: action,
-        iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true},
+        iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true, clearSelectionOnOutsideClick: false},
         h(FileNavbar),
         h(FileToolbar, null, h('button', {type: 'button', className: 'webos-files-upload', disabled: state.busy || pending, onClick: beginUpload},
           h(ChonkyIconFA, {icon: ChonkyIconName.upload}), 'Upload')),
