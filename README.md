@@ -27,3 +27,20 @@ pending operation is refused before Storage runs. A grant for one folder cannot
 follow a later navigation into another. Tests cover this race and policies that
 grant one destination while denying another. This is a local domain boundary;
 delegated server authentication remains a separate integration requirement.
+
+## Activating an existing editor
+
+The optional host `activateFile` callback receives the authorized canonical
+path, filename and Files instance/session identity. It must return a boolean.
+A true result activates the existing editor before Files transfers any bytes;
+`execute('open')` then reports `{status: 'activated', path}` without claiming a
+newly loaded revision. A miss follows the ordinary server read and exact-revision
+`openFile` callback. That callback can also acknowledge activation when another
+Files instance opened the document while the read waited. Folder navigation and
+server authorization are unchanged.
+
+The current composition reuses Text windows by account and full current path,
+including after Save As. It leaves their unsaved document and base revision
+intact. WordCraft multi-document activation remains separate work. Domain tests
+cover authority, no-transfer activation, misses, late races and invalid replies;
+the parent `tests/text_activation_browser.mjs` checks real Files/CodeMirror.

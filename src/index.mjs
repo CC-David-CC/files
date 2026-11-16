@@ -167,8 +167,8 @@ function FilesView({controller, execute, signal, downloads}) {
     h('div', {className: 'webos-files-status', role: 'status'}, status));
 }
 
-export function mount({files, instanceId, sessionId, authority, authorize, openFile, signal: parentSignal}) {
-  const controller = createFilesController({files, instanceId, sessionId, authorize, openFile}), element = document.createElement('div');
+export function mount({files, instanceId, sessionId, authority, authorize, openFile, activateFile, signal: parentSignal}) {
+  const controller = createFilesController({files, instanceId, sessionId, authorize, openFile, activateFile}), element = document.createElement('div');
   element.className = 'webos-files'; const root = createRoot(element), abort = new AbortController(), downloads = new Map(); let disposed = false;
   const execute = (operation, args = {}) => controller.execute({instanceId, sessionId, operation, args}, authority);
   function dispose() { if (disposed) return; disposed = true; parentSignal?.removeEventListener('abort', dispose); abort.abort(); root.unmount(); controller.dispose(); for (const [url, timer] of downloads) { clearTimeout(timer); URL.revokeObjectURL(url); } downloads.clear(); element.remove(); }

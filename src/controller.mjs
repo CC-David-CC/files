@@ -1,6 +1,6 @@
 /** Per-instance browsing state over a shared server-authoritative file service. */
-export function createFilesController({files, instanceId, sessionId, authorize, openFile}) {
-  if (!files || !instanceId || !sessionId || typeof authorize !== 'function' || typeof openFile !== 'function') throw TypeError('Explicit Files dependencies and target identities required.');
+export function createFilesController({files, instanceId, sessionId, authorize, openFile, activateFile = () => false}) {
+  if (!files || !instanceId || !sessionId || typeof authorize !== 'function' || typeof openFile !== 'function' || typeof activateFile !== 'function') throw TypeError('Explicit Files dependencies and target identities required.');
   let directory = '', entries = [], busy = false, disposed = false, error = '', notice = '', revision = 0;
   const listeners = new Set();
   const check = () => { if (disposed) throw new DOMException('Files view closed.', 'AbortError'); files.check(); };
@@ -51,8 +51,12 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
     },
     async open({path: value}) {
       const selected = entry(value); if (selected.directory) return refresh(selected.path);
+      const activated = await activateFile({path: selected.path, name: selected.name, sessionId, sourceInstanceId: instanceId}); check();
+      if (typeof activated !== 'boolean') throw TypeError('File activation must return a boolean.');
+      if (activated) return {status: 'activated', path: selected.path};
       const result = await files.read(selected.path); check();
-      await openFile({path: selected.path, name: selected.name, sha256: result.sha256, data: result.data, sessionId, sourceInstanceId: instanceId}); check();
+      const opened = await openFile({path: selected.path, name: selected.name, sha256: result.sha256, data: result.data, sessionId, sourceInstanceId: instanceId}); check();
+      if (opened?.status === 'activated') return {status: 'activated', path: selected.path};
       return {status: 'opened', path: selected.path, sha256: result.sha256};
     },
     async import({name, blob}) {
