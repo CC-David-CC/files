@@ -36,7 +36,7 @@ function ask({title, value, fieldLabel = 'Name', danger = false, items, signal})
 }
 
 function FilesView({controller, execute, signal, downloads}) {
-  const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false), [multiSelect, setMultiSelect] = useState(false);
+  const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false);
   const upload = useRef(null), uploadTarget = useRef(null), taskActive = useRef(false);
   useEffect(() => controller.subscribe(setState), [controller]);
   useEffect(() => {
@@ -111,10 +111,16 @@ function FilesView({controller, execute, signal, downloads}) {
   }
   async function action(event) {
     if (event.id === Upload.id) { beginUpload(); return; }
-    if (![ChonkyActions.OpenParentFolder.id, ChonkyActions.OpenFiles.id, NewFolder.id, Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
+    // Chonky's parent-arrow action already dispatches OpenFiles for the
+    // breadcrumb parent. Handle that result once, not both notifications.
+    if (![ChonkyActions.OpenFiles.id, NewFolder.id, Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
     await task(async () => {
-      if (event.id === ChonkyActions.OpenParentFolder.id) return execute('list', {path: state.directory.split('/').slice(0, -1).join('/')});
-      if (event.id === ChonkyActions.OpenFiles.id) { const item = event.payload?.targetFile || event.payload?.files?.[0]; if (item) return item.id === '/' ? execute('list', {path: ''}) : execute('open', {path: item.id}); return; }
+      if (event.id === ChonkyActions.OpenFiles.id) {
+        const item = event.payload?.targetFile || event.payload?.files?.[0];
+        if (!item) return;
+        if (chain.some(folder => folder.id === item.id)) return execute('list', {path: item.id === '/' ? '' : item.id});
+        return execute('open', {path: item.id});
+      }
       if (event.id === NewFolder.id) { const name = await ask({title: 'New folder', value: '', signal}); if (name !== null) await execute('mkdir', {name}); return; }
       if (![Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
       if (event.id === Remove.id) {
@@ -139,15 +145,6 @@ function FilesView({controller, execute, signal, downloads}) {
   }
   const status = message || state.error || (state.busy || pending ? 'Working with the server…' : state.notice || 'Showing account files from the server.');
   return h('div', {className: 'webos-files-view',
-    onClickCapture: event => {
-      if (!multiSelect || taskActive.current || controller.inspect().busy) return;
-      const row = event.target.closest?.('[data-chonky-context-file-id]');
-      if (!row || !event.currentTarget.contains(row) || event.target.closest('button,a[href],[role=button],input')) return;
-      event.preventDefault(); event.stopPropagation(); row.focus({preventScroll: true});
-      // Use Chonky's public keyboard interaction: Space toggles one item
-      // without clearing the rest of this view's selection.
-      row.dispatchEvent(new KeyboardEvent('keydown', {key: ' ', code: 'Space', bubbles: true, cancelable: true}));
-    },
     onDragEnterCapture: event => { if (!externalFiles(event)) return; event.preventDefault(); if (!taskActive.current && !controller.inspect().busy) setDropActive(true); },
     onDragOverCapture: event => { if (!externalFiles(event)) return; event.preventDefault(); event.dataTransfer.dropEffect = taskActive.current || controller.inspect().busy ? 'none' : 'copy'; },
     onDragLeaveCapture: event => { if (!event.currentTarget.contains(event.relatedTarget)) setDropActive(false); },
@@ -157,9 +154,7 @@ function FilesView({controller, execute, signal, downloads}) {
       uploadFiles([...event.dataTransfer.files || []], controller.inspect().directory);
     }},
     h('div', {className: 'webos-files-bar'}, h('strong', null, 'My files'), h('span', null, 'Account storage'),
-      h('button', {type: 'button', 'aria-pressed': multiSelect, disabled: state.busy || pending, onClick: () => setMultiSelect(value => !value)}, multiSelect ? 'Done selecting' : 'Select multiple'),
-      h('button', {type: 'button', disabled: state.busy || pending, onClick: () => task(() => execute('list'))}, 'Refresh'),
-      h('button', {type: 'button', 'aria-label': 'Parent folder', disabled: !state.directory || state.busy || pending, onClick: () => task(() => execute('list', {path: state.directory.split('/').slice(0, -1).join('/')}))}, 'Up')),
+      h('button', {type: 'button', disabled: state.busy || pending, onClick: () => task(() => execute('list'))}, 'Refresh')),
     h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files'}),
     h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
