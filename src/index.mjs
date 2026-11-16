@@ -40,7 +40,9 @@ function FilesView({controller, execute, signal, downloads}) {
     window.addEventListener('dragover', prevent); window.addEventListener('drop', prevent);
     return () => { window.removeEventListener('dragover', prevent); window.removeEventListener('drop', prevent); };
   }, []);
-  const chain = [{id: '', name: 'My files', isDir: true}]; let current = '';
+  // Chonky requires a nonempty ID. The UI-only root sentinel cannot collide
+  // with a canonical account path, which never starts with a slash.
+  const chain = [{id: '/', name: 'My files', isDir: true}]; let current = '';
   for (const part of state.directory.split('/').filter(Boolean)) { current += (current ? '/' : '') + part; chain.push({id: current, name: part, isDir: true}); }
   const files = state.entries.map(item => ({id: item.path, name: item.name, isDir: item.directory, size: item.directory ? undefined : item.bytes, draggable: false, droppable: false}));
   async function task(action) {
@@ -106,7 +108,7 @@ function FilesView({controller, execute, signal, downloads}) {
     if (![ChonkyActions.OpenParentFolder.id, ChonkyActions.OpenFiles.id, NewFolder.id, Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
     await task(async () => {
       if (event.id === ChonkyActions.OpenParentFolder.id) return execute('list', {path: state.directory.split('/').slice(0, -1).join('/')});
-      if (event.id === ChonkyActions.OpenFiles.id) { const item = event.payload?.targetFile || event.payload?.files?.[0]; if (item) return execute('open', {path: item.id}); return; }
+      if (event.id === ChonkyActions.OpenFiles.id) { const item = event.payload?.targetFile || event.payload?.files?.[0]; if (item) return item.id === '/' ? execute('list', {path: ''}) : execute('open', {path: item.id}); return; }
       if (event.id === NewFolder.id) { const name = await ask({title: 'New folder', value: '', signal}); if (name !== null) await execute('mkdir', {name}); return; }
       if (![Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
       const item = await selected(event); if (signal.aborted) return;
