@@ -1,12 +1,12 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {FullFileBrowser, ChonkyActions, ChonkyIconName, defineFileAction} from '@samuelncui/chonky';
+import {FileBrowser, FileNavbar, FileToolbar, FileList, FileContextMenu, ChonkyActions, ChonkyIconName, defineFileAction} from '@samuelncui/chonky';
 import {ChonkyIconFA} from '@samuelncui/chonky-icon-fontawesome';
 import {createFilesController} from './controller.mjs';
 import './style.css';
 export {createFilesController} from './controller.mjs';
 const h = React.createElement;
-const Upload = defineFileAction({id: 'webos_upload', button: {name: 'Upload', toolbar: true, contextMenu: true, icon: ChonkyIconName.upload}});
+const Upload = defineFileAction({id: 'webos_upload', button: {name: 'Upload', toolbar: false, contextMenu: true, icon: ChonkyIconName.upload}});
 const NewFolder = defineFileAction({id: 'webos_new_folder', button: {name: 'New folder', toolbar: true, contextMenu: true, icon: ChonkyIconName.folder}});
 const Rename = defineFileAction({id: 'webos_rename', requiresSelection: true, button: {name: 'Rename', toolbar: true, contextMenu: true, icon: ChonkyIconName.text}});
 const Move = defineFileAction({id: 'webos_move', requiresSelection: true, button: {name: 'Move', toolbar: true, contextMenu: true, icon: ChonkyIconName.folder}});
@@ -68,9 +68,13 @@ function FilesView({controller, execute, signal, downloads}) {
   }
   function beginUpload() {
     if (taskActive.current || controller.inspect().busy || signal.aborted) { setMessage('Wait for the current Files operation to finish, then try again.'); return; }
+    if (uploadTarget.current !== null) return;
     uploadTarget.current = controller.inspect().directory;
     setMessage('Choose files to upload to ' + (uploadTarget.current || 'My files') + '.');
-    try { upload.current.click(); } catch (error) { uploadTarget.current = null; setMessage('Could not open the file picker: ' + error.message); }
+    try {
+      if (typeof upload.current.showPicker === 'function') upload.current.showPicker();
+      else upload.current.click();
+    } catch (error) { uploadTarget.current = null; setMessage('Could not open the file picker: ' + error.message); }
   }
   useEffect(() => {
     const input = upload.current;
@@ -79,7 +83,13 @@ function FilesView({controller, execute, signal, downloads}) {
       if (directory === null) { setMessage('Choose Upload again in the destination folder.'); return; }
       uploadFiles(files, directory);
     };
-    const cancelled = () => { uploadTarget.current = null; setMessage('Upload cancelled.'); };
+    const cancelled = () => {
+      // A picker owns only its waiting selection, never an import already
+      // started by change. Ignore late notifications from a handled chooser.
+      if (uploadTarget.current === null) return;
+      uploadTarget.current = null;
+      if (!taskActive.current) setMessage('Upload cancelled.');
+    };
     // Listen to the native file-control events directly. React's normalized
     // cancel handler does not deliver this input's picker-cancellation event.
     input.addEventListener('change', selected); input.addEventListener('cancel', cancelled);
@@ -127,8 +137,12 @@ function FilesView({controller, execute, signal, downloads}) {
     h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files'}),
     h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
-      h(FullFileBrowser, {files, folderChain: chain, onFileAction: action,
-      iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true})),
+      h(FileBrowser, {files, folderChain: chain, onFileAction: action,
+        iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true},
+        h(FileNavbar),
+        h(FileToolbar, null, h('button', {type: 'button', className: 'webos-files-upload', disabled: state.busy || pending, onClick: beginUpload},
+          h(ChonkyIconFA, {icon: ChonkyIconName.upload}), 'Upload')),
+        h(FileList), h(FileContextMenu))),
     h('div', {className: 'webos-files-status', role: 'status'}, status));
 }
 

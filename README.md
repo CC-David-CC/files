@@ -10,6 +10,8 @@ The parent's files_upload_browser.mjs verifies the actual toolbar picker and bro
 
 External files can be dropped into Files or selected with Upload. Both paths use the same server-authoritative import operation and show upload/confirmation/error messages. Picker selection and each batch item retain the intended folder; navigation cannot redirect a pending import. Folder drops are rejected. Existing names are refused without overwriting account bytes. File-picker selection and cancellation use native input events with listeners removed on unmount.
 
+The toolbar Upload button opens the browser's native picker directly from its click handler, using showPicker when available and input.click otherwise. The public Chonky toolbar slot hosts this button; its asynchronous file-action dispatcher is not the toolbar trigger. Only one chooser may wait for selection. A late cancellation notification cannot overwrite a started/completed import or its error. The parent browser regression also exercises that late-event case explicitly.
+
 Legacy recursive copy, archive/extraction, multi-selection management workflows, background mirror/draft recovery, internal drag moves and server word-count are preserved but not yet ported into this interface. Internal Chonky drag/drop remains disabled. Folder deletion follows the backend's empty-folder rule; folder moves remain unavailable. The parent viewer opens Text and WordCraft through the public host callback. No live account data was copied or migrated.
 
 Move accepts a destination path relative to My files and uses Storage's revision-checked rename operation. It never implements a copy/delete substitute. Folder moves remain unsupported; destination collisions and permission checks are enforced by the server.
