@@ -88,6 +88,7 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       if (!request || request.instanceId !== instanceId || request.sessionId !== sessionId || !Object.hasOwn(ops, request.operation)) throw Error('Explicit current Files instance and session target required.');
       // Bytes are explicit operation input, never returned by ordinary inspect.
       const operation = request.operation, args = {...request.args}, capturedDirectory = directory;
+      if (operation === 'import' && args.expectedDirectory !== undefined && args.expectedDirectory !== capturedDirectory) throw Error('The destination folder changed. Choose Upload again in the destination folder.');
       let destination = null;
       if (operation === 'move') destination = path(args.destination);
       if (['import', 'mkdir', 'rename'].includes(operation)) {

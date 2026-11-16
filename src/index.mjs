@@ -30,19 +30,69 @@ function ask({title, value, fieldLabel = 'Name', danger = false, signal}) {
 }
 
 function FilesView({controller, execute, signal, downloads}) {
-  const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), upload = useRef(null);
+  const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false);
+  const upload = useRef(null), uploadTarget = useRef(null), taskActive = useRef(false);
   useEffect(() => controller.subscribe(setState), [controller]);
+  useEffect(() => {
+    // External files dropped outside an upload target must not navigate away
+    // from the desktop. Internal Chonky movement remains disabled.
+    const prevent = event => { if ([...event.dataTransfer?.types || []].includes('Files')) event.preventDefault(); };
+    window.addEventListener('dragover', prevent); window.addEventListener('drop', prevent);
+    return () => { window.removeEventListener('dragover', prevent); window.removeEventListener('drop', prevent); };
+  }, []);
   const chain = [{id: '', name: 'My files', isDir: true}]; let current = '';
   for (const part of state.directory.split('/').filter(Boolean)) { current += (current ? '/' : '') + part; chain.push({id: current, name: part, isDir: true}); }
   const files = state.entries.map(item => ({id: item.path, name: item.name, isDir: item.directory, size: item.directory ? undefined : item.bytes, draggable: false, droppable: false}));
-  async function task(action) { if (pending || signal.aborted) return; setPending(true); setMessage(''); try { await action(); } catch (error) { if (!signal.aborted) setMessage(error.message + (error.outcome === 'unknown' ? ' The server outcome is unknown; refresh before retrying.' : '')); } finally { if (!signal.aborted) setPending(false); } }
+  async function task(action) {
+    if (signal.aborted) return;
+    if (taskActive.current || controller.inspect().busy) { setMessage('Wait for the current Files operation to finish, then try again.'); return; }
+    taskActive.current = true; setPending(true); setMessage('');
+    try { await action(); }
+    catch (error) { if (!signal.aborted) setMessage(error.message + (error.outcome === 'unknown' ? ' The server outcome is unknown; refresh before retrying.' : '')); }
+    finally { taskActive.current = false; if (!signal.aborted) setPending(false); }
+  }
+  function uploadFiles(selected, directory) {
+    if (!selected.length) { setMessage('No files selected.'); return; }
+    void task(async () => {
+      let completed = 0;
+      try {
+        for (const file of selected) {
+          if (signal.aborted) return;
+          if (file.size > 128 * 1024 * 1024) throw Error('Files are limited to 128 MiB.');
+          setMessage('Uploading ' + (completed + 1) + ' of ' + selected.length + ': ' + file.name + '…');
+          await execute('import', {name: file.name, blob: new Blob([file]), expectedDirectory: directory}); completed++;
+        }
+        if (!signal.aborted) setMessage('Saved ' + completed + (completed === 1 ? ' file' : ' files') + ' to your account.');
+      } catch (error) { throw Object.assign(Error((completed ? completed + ' files saved before upload stopped. ' : '') + error.message), {outcome: error.outcome}); }
+    });
+  }
+  function beginUpload() {
+    if (taskActive.current || controller.inspect().busy || signal.aborted) { setMessage('Wait for the current Files operation to finish, then try again.'); return; }
+    uploadTarget.current = controller.inspect().directory;
+    setMessage('Choose files to upload to ' + (uploadTarget.current || 'My files') + '.');
+    try { upload.current.click(); } catch (error) { uploadTarget.current = null; setMessage('Could not open the file picker: ' + error.message); }
+  }
+  useEffect(() => {
+    const input = upload.current;
+    const selected = () => {
+      const files = [...input.files], directory = uploadTarget.current; input.value = ''; uploadTarget.current = null;
+      if (directory === null) { setMessage('Choose Upload again in the destination folder.'); return; }
+      uploadFiles(files, directory);
+    };
+    const cancelled = () => { uploadTarget.current = null; setMessage('Upload cancelled.'); };
+    // Listen to the native file-control events directly. React's normalized
+    // cancel handler does not deliver this input's picker-cancellation event.
+    input.addEventListener('change', selected); input.addEventListener('cancel', cancelled);
+    return () => { input.removeEventListener('change', selected); input.removeEventListener('cancel', cancelled); };
+  }, [controller, execute, signal]);
+  const externalFiles = event => [...event.dataTransfer?.types || []].includes('Files');
   async function selected(event) {
     const items = event.state?.selectedFilesForAction || event.state?.selectedFiles || [];
     if (items.length !== 1) throw Error('Select one file or folder.');
     return await execute('snapshot', {path: items[0].id});
   }
   async function action(event) {
-    if (event.id === Upload.id) { upload.current?.click(); return; }
+    if (event.id === Upload.id) { beginUpload(); return; }
     if (![ChonkyActions.OpenParentFolder.id, ChonkyActions.OpenFiles.id, NewFolder.id, Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
     await task(async () => {
       if (event.id === ChonkyActions.OpenParentFolder.id) return execute('list', {path: state.directory.split('/').slice(0, -1).join('/')});
@@ -61,18 +111,25 @@ function FilesView({controller, execute, signal, downloads}) {
       }
     });
   }
-  return h('div', {className: 'webos-files-view'},
+  const status = message || state.error || (state.busy || pending ? 'Working with the server…' : state.notice || 'Showing account files from the server.');
+  return h('div', {className: 'webos-files-view',
+    onDragEnterCapture: event => { if (!externalFiles(event)) return; event.preventDefault(); if (!taskActive.current && !controller.inspect().busy) setDropActive(true); },
+    onDragOverCapture: event => { if (!externalFiles(event)) return; event.preventDefault(); event.dataTransfer.dropEffect = taskActive.current || controller.inspect().busy ? 'none' : 'copy'; },
+    onDragLeaveCapture: event => { if (!event.currentTarget.contains(event.relatedTarget)) setDropActive(false); },
+    onDropCapture: event => {
+      if (!externalFiles(event)) return; event.preventDefault(); event.stopPropagation(); setDropActive(false);
+      if ([...event.dataTransfer.items || []].some(item => item.kind === 'file' && item.webkitGetAsEntry?.()?.isDirectory)) { setMessage('Folder upload is not supported. Drop files instead.'); return; }
+      uploadFiles([...event.dataTransfer.files || []], controller.inspect().directory);
+    }},
     h('div', {className: 'webos-files-bar'}, h('strong', null, 'My files'), h('span', null, 'Account storage'),
       h('button', {type: 'button', disabled: state.busy || pending, onClick: () => task(() => execute('list'))}, 'Refresh'),
       h('button', {type: 'button', 'aria-label': 'Parent folder', disabled: !state.directory || state.busy || pending, onClick: () => task(() => execute('list', {path: state.directory.split('/').slice(0, -1).join('/')}))}, 'Up')),
-    h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files', onChange: event => {
-      const selected = [...event.target.files]; event.target.value = '';
-      task(async () => { let completed = 0; try { for (const file of selected) { if (signal.aborted) return; await execute('import', {name: file.name, blob: new Blob([file])}); completed++; } }
-        catch (error) { throw Object.assign(Error((completed ? completed + ' files saved before upload stopped. ' : '') + error.message), {outcome: error.outcome}); } });
-    }}),
-    h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending}, h(FullFileBrowser, {files, folderChain: chain, onFileAction: action,
+    h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files'}),
+    h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending},
+      dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
+      h(FullFileBrowser, {files, folderChain: chain, onFileAction: action,
       iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true})),
-    h('div', {className: 'webos-files-status', role: 'status'}, message || state.error || (state.busy || pending ? 'Working with the server…' : state.notice || 'Showing account files from the server.')));
+    h('div', {className: 'webos-files-status', role: 'status'}, status));
 }
 
 export function mount({files, instanceId, sessionId, authority, authorize, openFile, signal: parentSignal}) {

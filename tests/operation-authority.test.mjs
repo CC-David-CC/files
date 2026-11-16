@@ -45,3 +45,12 @@ test('import policy can restrict the actual account destination', async () => {
   await assert.rejects(f.run('import', {name: 'forbidden.txt', blob: new Blob(['disposable'])}), /denied/i);
   assert.equal(f.writes.length, 1); assert.equal(f.writes[0][0], 'Documents/allowed.txt');
 });
+
+test('picker and batch imports cannot drift to a newly navigated folder', async () => {
+  const f = fixture(() => true);
+  await f.run('list', {path: 'Documents'});
+  await f.run('import', {name: 'first.mp4', blob: new Blob(['first']), expectedDirectory: 'Documents'});
+  await f.run('list', {path: 'other-folder'});
+  await assert.rejects(f.run('import', {name: 'second.mp4', blob: new Blob(['second']), expectedDirectory: 'Documents'}), /destination folder changed/i);
+  assert.equal(f.writes.length, 1); assert.equal(f.writes[0][0], 'Documents/first.mp4');
+});
