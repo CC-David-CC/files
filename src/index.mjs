@@ -35,7 +35,7 @@ function ask({title, value, fieldLabel = 'Name', danger = false, items, signal})
   });
 }
 
-function FilesView({controller, execute, signal, downloads}) {
+function FilesView({controller, execute, signal, downloads, onRefresh}) {
   const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false);
   const upload = useRef(null), uploadTarget = useRef(null), taskActive = useRef(false);
   useEffect(() => controller.subscribe(setState), [controller]);
@@ -154,7 +154,10 @@ function FilesView({controller, execute, signal, downloads}) {
       uploadFiles([...event.dataTransfer.files || []], controller.inspect().directory);
     }},
     h('div', {className: 'webos-files-bar'}, h('strong', null, 'My files'), h('span', null, 'Account storage'),
-      h('button', {type: 'button', disabled: state.busy || pending, onClick: () => task(() => execute('list'))}, 'Refresh')),
+      h('button', {type: 'button', disabled: state.busy || pending, onClick: () => task(async () => {
+        await execute('list');
+        if (!signal.aborted) await onRefresh?.();
+      })}, 'Refresh')),
     h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files'}),
     h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
@@ -167,14 +170,14 @@ function FilesView({controller, execute, signal, downloads}) {
     h('div', {className: 'webos-files-status', role: 'status'}, status));
 }
 
-export function mount({files, instanceId, sessionId, authority, authorize, openFile, activateFile, signal: parentSignal}) {
+export function mount({files, instanceId, sessionId, authority, authorize, openFile, activateFile, signal: parentSignal, onRefresh}) {
   const controller = createFilesController({files, instanceId, sessionId, authorize, openFile, activateFile}), element = document.createElement('div');
   element.className = 'webos-files'; const root = createRoot(element), abort = new AbortController(), downloads = new Map(); let disposed = false;
   const execute = (operation, args = {}) => controller.execute({instanceId, sessionId, operation, args}, authority);
   function dispose() { if (disposed) return; disposed = true; parentSignal?.removeEventListener('abort', dispose); abort.abort(); root.unmount(); controller.dispose(); for (const [url, timer] of downloads) { clearTimeout(timer); URL.revokeObjectURL(url); } downloads.clear(); element.remove(); }
   if (parentSignal?.aborted) { dispose(); throw new DOMException('Files startup cancelled.', 'AbortError'); }
   parentSignal?.addEventListener('abort', dispose, {once: true});
-  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads}));
+  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh}));
   const ready = execute('list'); ready.catch(() => {});
   return Object.freeze({element, dispose, ready, inspect: controller.inspect, execute, requestClose: () => !controller.inspect().busy});
 }
