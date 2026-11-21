@@ -164,8 +164,8 @@ function FilesView({controller, execute, signal, downloads, onRefresh}) {
       h(FileBrowser, {files, folderChain: chain, onFileAction: action,
         iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true, clearSelectionOnOutsideClick: false},
         h(FileNavbar),
-        h(FileToolbar, null, h('button', {type: 'button', className: 'webos-files-upload', disabled: state.busy || pending, onClick: beginUpload},
-          h(ChonkyIconFA, {icon: ChonkyIconName.upload}), 'Upload')),
+        h('div', {className: 'webos-files-toolbar'}, h(FileToolbar, {layout: 'inline'}, h('button', {type: 'button', className: 'webos-files-upload', disabled: state.busy || pending, onClick: beginUpload},
+          h(ChonkyIconFA, {icon: ChonkyIconName.upload}), 'Upload'))),
         h(FileList), h(FileContextMenu))),
     h('div', {className: 'webos-files-status', role: 'status'}, status));
 }

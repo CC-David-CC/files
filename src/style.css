@@ -4,3 +4,16 @@
 
 .webos-files-upload{display:inline-flex;align-items:center;gap:6px;margin:0 8px;padding:6px 8px;border:0;background:transparent;color:#1976d2;font:inherit;cursor:pointer}.webos-files-upload:disabled{color:#aaa;cursor:default}.webos-files-upload svg{width:1em;height:1em}
 .webos-files-dialog ul{max-height:35vh;overflow:auto;overflow-wrap:anywhere;padding-left:24px}.webos-files-dialog p{max-width:440px}
+
+.webos-files-toolbar { container-type: inline-size; }
+/* Keep the summary and upload control together when the actions need another row. */
+@container (max-width: 900px) {
+  .webos-files-toolbar > div > div {
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+  }
+  .webos-files-toolbar > div > div > :last-child {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex-wrap: wrap;
+  }
+}
