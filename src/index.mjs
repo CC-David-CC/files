@@ -153,7 +153,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, temporary
       if ([...event.dataTransfer.items || []].some(item => item.kind === 'file' && item.webkitGetAsEntry?.()?.isDirectory)) { setMessage('Folder upload is not supported. Drop files instead.'); return; }
       uploadFiles([...event.dataTransfer.files || []], controller.inspect().directory);
     }},
-    h('div', {className: 'webos-files-bar'}, h('strong', null, 'My files'), h('span', null, 'Account storage'),
+    h('div', {className: 'webos-files-bar'}, h('strong', null, 'My files'), h('span', null, temporary ? 'This browser tab' : 'Account storage'),
       h('button', {type: 'button', disabled: state.busy || pending, onClick: () => task(async () => {
         await execute('list');
         if (!signal.aborted) await onRefresh?.();
