@@ -64,19 +64,19 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       const destination = path((directory ? directory + '/' : '') + name);
       // Immutable Blob capture and hashing are owned by Storage's real worker.
       const result = await files.write(destination, blob); check();
-      return confirmed({status: 'saved', path: destination, sha256: result.sha256, committed: true}, 'Saved to your account: ' + name);
+      return confirmed({status: 'saved', path: destination, sha256: result.sha256, committed: true}, (files.temporary ? 'Saved in this tab: ' : 'Saved to your account: ') + name);
     },
     async mkdir({name}) {
       if (typeof name !== 'string' || name.includes('/')) throw TypeError('A folder name is required.');
       const destination = path((directory ? directory + '/' : '') + name);
-      await files.mkdir(destination); check(); return confirmed({status: 'created', path: destination, committed: true}, 'Folder created on the server.');
+      await files.mkdir(destination); check(); return confirmed({status: 'created', path: destination, committed: true}, files.temporary ? 'Folder created in this tab.' : 'Folder created on the server.');
     },
     async rename({path: value, name, expectedRevision}) {
       const selected = entry(value); if (selected.directory) throw Error('Folder moves are not enabled yet.');
       if (typeof name !== 'string' || name.includes('/')) throw TypeError('A filename is required.');
       if (!/^[0-9a-f]{64}$/.test(expectedRevision || '')) throw TypeError('An exact selected file revision is required.');
       const destination = path((directory ? directory + '/' : '') + name);
-      await files.rename(selected.path, destination, expectedRevision); check(); return confirmed({status: 'renamed', path: destination, committed: true}, 'Renamed on the server.');
+      await files.rename(selected.path, destination, expectedRevision); check(); return confirmed({status: 'renamed', path: destination, committed: true}, files.temporary ? 'Renamed in this tab.' : 'Renamed on the server.');
     },
     async move({path: value, destination, expectedRevision}) {
       const selected = entry(value); if (selected.directory) throw Error('Folder moves are not enabled yet.');
@@ -84,7 +84,7 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       if (target === selected.path) throw Error('Choose a different destination.');
       if (!/^[0-9a-f]{64}$/.test(expectedRevision || '')) throw TypeError('An exact selected file revision is required.');
       await files.rename(selected.path, target, expectedRevision); check();
-      return confirmed({status: 'moved', path: target, committed: true}, 'Moved on the server.');
+      return confirmed({status: 'moved', path: target, committed: true}, files.temporary ? 'Moved in this tab.' : 'Moved on the server.');
     },
     async remove({items}) {
       const deletedPaths = [];
@@ -103,7 +103,7 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
         throw Object.assign(Error(message), {cause: failure, outcome: failure.outcome, deletedPaths, deletedCount: deletedPaths.length, total: items.length});
       }
       return confirmed({status: 'deleted', committed: true, deletedPaths, deletedCount: deletedPaths.length, total: items.length},
-        items.length === 1 ? 'Deleted from your account.' : 'Deleted ' + deletedPaths.length + ' items from your account.');
+        files.temporary ? 'Deleted from this tab.' : items.length === 1 ? 'Deleted from your account.' : 'Deleted ' + deletedPaths.length + ' items from your account.');
     },
     async download({path: value, expectedRevision}) {
       const selected = entry(value); if (selected.directory) throw Error('Choose a file.');

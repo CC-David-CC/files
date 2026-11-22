@@ -35,7 +35,7 @@ function ask({title, value, fieldLabel = 'Name', danger = false, items, signal})
   });
 }
 
-function FilesView({controller, execute, signal, downloads, onRefresh}) {
+function FilesView({controller, execute, signal, downloads, onRefresh, temporary}) {
   const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false);
   const upload = useRef(null), uploadTarget = useRef(null), taskActive = useRef(false);
   useEffect(() => controller.subscribe(setState), [controller]);
@@ -70,7 +70,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh}) {
           setMessage('Uploading ' + (completed + 1) + ' of ' + selected.length + ': ' + file.name + '…');
           await execute('import', {name: file.name, blob: new Blob([file]), expectedDirectory: directory}); completed++;
         }
-        if (!signal.aborted) setMessage('Saved ' + completed + (completed === 1 ? ' file' : ' files') + ' to your account.');
+        if (!signal.aborted) setMessage('Saved ' + completed + (completed === 1 ? ' file' : ' files') + (temporary ? ' in this tab.' : ' to your account.'));
       } catch (error) { throw Object.assign(Error((completed ? completed + ' files saved before upload stopped. ' : '') + error.message), {outcome: error.outcome}); }
     });
   }
@@ -128,7 +128,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh}) {
         if (!selection.length) throw Error('Select files or folders to delete.');
         const items = [];
         for (const item of selection) { items.push(await execute('snapshot', {path: item.id})); if (signal.aborted) return; }
-        const title = items.length === 1 ? 'Delete ' + items[0].name + ' from your account?' : 'Delete ' + items.length + ' items from your account?';
+        const title = temporary ? 'Delete the selected items from this tab?' : items.length === 1 ? 'Delete ' + items[0].name + ' from your account?' : 'Delete ' + items.length + ' items from your account?';
         if (await ask({title, items, danger: true, signal})) await execute('remove', {items: items.map(item => ({path: item.path, expectedRevision: item.sha256}))});
         return;
       }
@@ -143,7 +143,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh}) {
       }
     });
   }
-  const status = message || state.error || (state.busy || pending ? 'Working with the server…' : state.notice || 'Showing account files from the server.');
+  const status = message || state.error || (state.busy || pending ? (temporary ? 'Working…' : 'Working with the server…') : state.notice || (temporary ? 'Temporary files in this tab. Register to keep them before reloading or leaving.' : 'Showing account files from the server.'));
   return h('div', {className: 'webos-files-view',
     onDragEnterCapture: event => { if (!externalFiles(event)) return; event.preventDefault(); if (!taskActive.current && !controller.inspect().busy) setDropActive(true); },
     onDragOverCapture: event => { if (!externalFiles(event)) return; event.preventDefault(); event.dataTransfer.dropEffect = taskActive.current || controller.inspect().busy ? 'none' : 'copy'; },
@@ -177,7 +177,7 @@ export function mount({files, instanceId, sessionId, authority, authorize, openF
   function dispose() { if (disposed) return; disposed = true; parentSignal?.removeEventListener('abort', dispose); abort.abort(); root.unmount(); controller.dispose(); for (const [url, timer] of downloads) { clearTimeout(timer); URL.revokeObjectURL(url); } downloads.clear(); element.remove(); }
   if (parentSignal?.aborted) { dispose(); throw new DOMException('Files startup cancelled.', 'AbortError'); }
   parentSignal?.addEventListener('abort', dispose, {once: true});
-  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh}));
+  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh, temporary:files.temporary === true}));
   const ready = execute('list'); ready.catch(() => {});
   return Object.freeze({element, dispose, ready, inspect: controller.inspect, execute, requestClose: () => !controller.inspect().busy});
 }
