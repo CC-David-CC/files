@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {FileBrowser, FileNavbar, FileToolbar, FileList, FileContextMenu, ChonkyActions, ChonkyIconName, defineFileAction} from '@samuelncui/chonky';
+import {FileBrowser, FileNavbar, FileToolbar, FileList, FileContextMenu, ChonkyActions, ChonkyIconName, CustomVisibilityState, defineFileAction} from '@samuelncui/chonky';
 import {ChonkyIconFA} from '@samuelncui/chonky-icon-fontawesome';
 import {createFilesController} from './controller.mjs';
 import './style.css';
@@ -8,12 +8,18 @@ export {createFilesController} from './controller.mjs';
 const h = React.createElement;
 const Upload = defineFileAction({id: 'webos_upload', button: {name: 'Upload', toolbar: false, contextMenu: true, icon: ChonkyIconName.upload}});
 const NewFolder = defineFileAction({id: 'webos_new_folder', button: {name: 'New folder', toolbar: true, contextMenu: true, icon: ChonkyIconName.folder}});
-const Rename = defineFileAction({id: 'webos_rename', requiresSelection: true, button: {name: 'Rename', toolbar: true, contextMenu: true, icon: ChonkyIconName.text}});
-const Move = defineFileAction({id: 'webos_move', requiresSelection: true, button: {name: 'Move', toolbar: true, contextMenu: true, icon: ChonkyIconName.folder}});
-const Download = defineFileAction({id: 'webos_download', requiresSelection: true, button: {name: 'Download', toolbar: true, contextMenu: true, icon: ChonkyIconName.download}});
+const hasSingleFile = ({selectedFiles}) => selectedFiles.length === 1 && !selectedFiles[0].isDir;
+const singleFileAction = {
+  requiresSelection: true,
+  customVisibility: state => hasSingleFile(state) ? CustomVisibilityState.Default : CustomVisibilityState.Disabled,
+};
+const Rename = defineFileAction({id: 'webos_rename', ...singleFileAction, button: {name: 'Rename', toolbar: true, contextMenu: true, icon: ChonkyIconName.text}});
+const Move = defineFileAction({id: 'webos_move', ...singleFileAction, button: {name: 'Move', toolbar: true, contextMenu: true, icon: ChonkyIconName.folder}});
+const Download = defineFileAction({id: 'webos_download', ...singleFileAction, button: {name: 'Download', toolbar: true, contextMenu: true, icon: ChonkyIconName.download}});
 const openWithAction = openChoices => defineFileAction({
-  id:'webos_open_with', requiresSelection:true,
-  fileFilter:file=>!file.isDir && openChoices(file.id).length>1,
+  id:'webos_open_with', ...singleFileAction,
+  customVisibility:state=>hasSingleFile(state) && openChoices(state.selectedFiles[0].id).length>1
+    ? CustomVisibilityState.Default : CustomVisibilityState.Disabled,
   button:{name:'Open With…',toolbar:true,contextMenu:true}
 });
 const Remove = defineFileAction({id: 'webos_remove', requiresSelection: true, hotkeys: ['delete'], button: {name: 'Delete', toolbar: true, contextMenu: true, icon: ChonkyIconName.trash}});
