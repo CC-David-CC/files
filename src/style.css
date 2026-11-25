@@ -47,6 +47,20 @@
   }
 }
 
+/* Keep the primary action readable when Chonky hides other toolbar labels. */
+.webos-files-toolbar button[aria-label="Open"] > [data-chonky-toolbar-label] {
+  display: inline;
+}
+@media (pointer: coarse) {
+  .webos-files-toolbar button {
+    min-width: 44px !important;
+    min-height: 44px;
+  }
+  .webos-files-bar button {
+    min-height: 44px;
+  }
+}
+
 /* Follow the desktop's explicit scheme, even when the browser prefers Light. */
 :is(.webos-files, .webos-files-dialog) {
   --files-surface: light-dark(#fff, var(--desktop-surface, #252a30));

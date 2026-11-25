@@ -13,6 +13,12 @@ const singleFileAction = {
   requiresSelection: true,
   customVisibility: state => hasSingleFile(state) ? CustomVisibilityState.Default : CustomVisibilityState.Disabled,
 };
+const Open = {
+  ...ChonkyActions.OpenSelection,
+  customVisibility: ({selectedFilesForAction}) => selectedFilesForAction.length === 1
+    ? CustomVisibilityState.Default : CustomVisibilityState.Disabled,
+  button: {...ChonkyActions.OpenSelection.button, name: 'Open', group: undefined},
+};
 const Rename = defineFileAction({id: 'webos_rename', ...singleFileAction, button: {name: 'Rename', toolbar: true, contextMenu: true, icon: ChonkyIconName.text}});
 const Move = defineFileAction({id: 'webos_move', ...singleFileAction, button: {name: 'Move', toolbar: true, contextMenu: true, icon: ChonkyIconName.folder}});
 const Download = defineFileAction({id: 'webos_download', ...singleFileAction, button: {name: 'Download', toolbar: true, contextMenu: true, icon: ChonkyIconName.download}});
@@ -276,7 +282,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
     h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending, onKeyDownCapture: openFocusedItem},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
       h(FileBrowser, {files, folderChain: chain, onFileAction: action, darkMode,
-        iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, OpenWith, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true, clearSelectionOnOutsideClick: false},
+        iconComponent: ChonkyIconFA, fileActions: [Upload, Open, NewFolder, OpenWith, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true, clearSelectionOnOutsideClick: false},
         h(FileNavbar),
         h('div', {className: 'webos-files-toolbar'}, h(FileToolbar, {layout: 'inline'}, h('button', {type: 'button', className: 'webos-files-upload', disabled: state.busy || pending, onClick: beginUpload},
           h(ChonkyIconFA, {icon: ChonkyIconName.upload}), 'Upload'))),
