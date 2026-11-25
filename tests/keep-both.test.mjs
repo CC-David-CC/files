@@ -76,3 +76,23 @@ test('a revision change after upload preserves the confirmed copy and reports th
   assert.match(controller.inspect().notice, /original still needs attention/);
   assert.deepEqual(calls.map(call => call[0]), ['capture','write','resolve','release']);
 });
+
+test('cancel deletion restores only the exact conflicted file tombstone', async () => {
+  let item = {path:'/'+conflictPath,version:revision,deleted:true,directory:false,status:'conflict'};
+  const calls = [];
+  const files = {check() {}, async list(){return {entries:[]};}};
+  const mirror = {
+    async list(path) { assert.equal(path,'/'); return {entries:[item]}; },
+    async resolve(path,choice,expected) {calls.push([path,choice,expected]);}
+  };
+  const controller = createFilesController({files,instanceId:'files',sessionId:'owner',
+    authorize:async () => true,openFile() {},openConflictMirror:async () => mirror});
+  const execute = () => controller.execute({instanceId:'files',sessionId:'owner',operation:'cancel-delete',
+    args:{path:conflictPath,expectedRevision:revision}});
+  item = {...item,deleted:false};
+  await assert.rejects(execute(),/pending deletion changed/);
+  assert.equal(calls.length,0);
+  item = {...item,deleted:true};
+  assert.equal((await execute()).status,'resolved');
+  assert.deepEqual(calls,[['/'+conflictPath,'server',revision]]);
+});

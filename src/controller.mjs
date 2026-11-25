@@ -113,6 +113,19 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       return confirmed({status: 'deleted', committed: true, deletedPaths, deletedCount: deletedPaths.length, total: items.length},
         files.temporary ? 'Deleted from this tab.' : items.length === 1 ? 'Deleted from your account.' : 'Deleted ' + deletedPaths.length + ' items from your account.');
     },
+    async 'cancel-delete'({path: value, expectedRevision}) {
+      const mirror = await openConflictMirror();
+      check();
+      const {entries: conflicts} = await mirror.list('/' + directory);
+      check();
+      if (!conflicts.some(item => item.path === '/' + value && item.version === expectedRevision
+          && item.deleted && !item.directory && item.status === 'conflict')) {
+        throw Error('The pending deletion changed. Select it again.');
+      }
+      await mirror.resolve('/' + value, 'server', expectedRevision);
+      check();
+      return confirmed({status: 'resolved', path: value}, 'Cancelled the pending deletion on this device.');
+    },
     async 'keep-both'({path: value, destination, expectedRevision}) {
       const mirror = await openConflictMirror();
       check();
@@ -172,14 +185,16 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       if (operation === 'import' && args.expectedDirectory !== undefined && args.expectedDirectory !== capturedDirectory) throw Error('The destination folder changed. Choose Upload again in the destination folder.');
       let destination = null;
       if (operation === 'move') destination = path(args.destination);
-      if (operation === 'keep-both') {
+      if (operation === 'keep-both' || operation === 'cancel-delete') {
         if (typeof openConflictMirror !== 'function') throw Error('Account file conflicts are unavailable.');
         const source = path(args.path);
         if (source.slice(0, Math.max(0, source.lastIndexOf('/'))) !== capturedDirectory) throw Error('Reopen the folder with the file conflict.');
         if (typeof args.expectedRevision !== 'string' || !args.expectedRevision || args.expectedRevision.length > 128) throw TypeError('Select an exact conflict revision.');
+      }
+      if (operation === 'keep-both') {
         if (typeof args.name !== 'string' || args.name.includes('/')) throw TypeError('Enter a filename for the device copy.');
         destination = path((capturedDirectory ? capturedDirectory + '/' : '') + args.name);
-        if (destination === source) throw Error('Choose a new name for the device copy.');
+        if (destination === args.path) throw Error('Choose a new name for the device copy.');
         args.destination = destination;
       }
       if (['import', 'mkdir', 'rename'].includes(operation)) {

@@ -30,13 +30,13 @@ const openWithAction = openChoices => defineFileAction({
 });
 const Remove = defineFileAction({id: 'webos_remove', requiresSelection: true, hotkeys: ['delete'], button: {name: 'Delete', toolbar: true, contextMenu: true, icon: ChonkyIconName.trash}});
 
-function ask({title, value, choices, description, fieldLabel = 'Name', danger = false, items, signal, selectDestination, confirmLabel}) {
+function ask({title, value, choices, description, fieldLabel = 'Name', danger = false, items, signal, selectDestination, confirmLabel, cancelLabel = 'Cancel'}) {
   if (signal.aborted) return Promise.resolve(null);
   const dialog = document.createElement('dialog'), form = document.createElement('form'), heading = document.createElement('h2'), actions = document.createElement('div');
   const input = !choices && value !== undefined ? document.createElement('input') : null;
   let initialFocus = input;
   dialog.className = 'webos-files-dialog'; heading.textContent = title; heading.id = 'files-dialog-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', heading.id);
-  const cancel = document.createElement('button'), submit = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; submit.type = 'submit'; submit.textContent = confirmLabel ?? (choices ? 'Open' : danger ? 'Delete' : 'Continue');
+  const cancel = document.createElement('button'), submit = document.createElement('button'); cancel.type = 'button'; cancel.textContent = cancelLabel; submit.type = 'submit'; submit.textContent = confirmLabel ?? (choices ? 'Open' : danger ? 'Delete' : 'Continue');
   if (choices) {
     const group = document.createElement('fieldset'), legend = document.createElement('legend');
     group.className = 'webos-files-app-choices';
@@ -131,7 +131,7 @@ function useConflicts(openConflictMirror, directory, signal) {
       try {
         const result = await mirror.list('/' + directory);
         if (active && !signal.aborted && request === revision) {
-          setListing({directory, entries: result.entries.filter(item => item.status === 'conflict' && !item.directory && !item.deleted)});
+          setListing({directory, entries: result.entries.filter(item => item.status === 'conflict' && !item.directory)});
         }
       } catch {
         if (active && !signal.aborted && request === revision) setListing(null);
@@ -183,6 +183,16 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
       if (name === null || signal.aborted) return;
       await execute('keep-both', {path: item.path.slice(1), name, expectedRevision: item.version});
       // The selected conflict row may disappear. Keep keyboard focus in Files.
+      conflictFocus.current?.focus({preventScroll: true});
+    });
+  }
+  function cancelDeletion(item) {
+    void task(async () => {
+      const confirmed = await ask({title: 'Cancel pending deletion of ' + item.name,
+        description: 'Keep the account version. This cancels the pending deletion on this device.',
+        confirmLabel: 'Cancel deletion', cancelLabel: 'Go back', signal});
+      if (!confirmed || signal.aborted) return;
+      await execute('cancel-delete', {path: item.path.slice(1), expectedRevision: item.version});
       conflictFocus.current?.focus({preventScroll: true});
     });
   }
@@ -331,8 +341,9 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
       h('strong', null, 'Sync conflicts'),
       h('ul', null, conflicts.map(item => h('li', {key: item.path},
         h('span', null, item.name),
-        h('button', {type: 'button', disabled: state.busy || pending, 'aria-label': 'Keep both versions of ' + item.name,
-          onClick: () => keepBoth(item)}, 'Keep both'))))),
+        h('button', {type: 'button', disabled: state.busy || pending,
+          'aria-label': (item.deleted ? 'Cancel pending deletion of ' : 'Keep both versions of ') + item.name,
+          onClick: () => item.deleted ? cancelDeletion(item) : keepBoth(item)}, item.deleted ? 'Cancel deletion' : 'Keep both'))))),
     h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files'}),
     h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending, onKeyDownCapture: openFocusedItem},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
