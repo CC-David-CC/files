@@ -49,13 +49,21 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       if (selected.directory) return {...selected, sha256: null};
       const version = await files.version(selected.path); check(); return {...selected, ...version};
     },
-    async open({path: value}) {
-      const selected = entry(value); if (selected.directory) return refresh(selected.path);
-      const activated = await activateFile({path: selected.path, name: selected.name, sessionId, sourceInstanceId: instanceId}); check();
-      if (typeof activated !== 'boolean') throw TypeError('File activation must return a boolean.');
-      if (activated) return {status: 'activated', path: selected.path};
+    async open({path: value, openWith, expectedRevision}) {
+      const selected = entry(value);
+      if (openWith !== undefined) {
+        if (selected.directory || typeof openWith !== 'string' || !/^[0-9a-f]{64}$/.test(expectedRevision || '')) {
+          throw TypeError('Choose one file and its exact revision.');
+        }
+      } else {
+        if (selected.directory) return refresh(selected.path);
+        const activated = await activateFile({path: selected.path, name: selected.name, sessionId, sourceInstanceId: instanceId}); check();
+        if (typeof activated !== 'boolean') throw TypeError('File activation must return a boolean.');
+        if (activated) return {status: 'activated', path: selected.path};
+      }
       const result = await files.read(selected.path); check();
-      const opened = await openFile({path: selected.path, name: selected.name, sha256: result.sha256, data: result.data, sessionId, sourceInstanceId: instanceId}); check();
+      if (openWith !== undefined && result.sha256 !== expectedRevision) throw Error('This file changed. Select it again before opening.');
+      const opened = await openFile({path: selected.path, name: selected.name, sha256: result.sha256, data: result.data, sessionId, sourceInstanceId: instanceId, ...(openWith === undefined ? {} : {openWith})}); check();
       if (opened?.status === 'activated') return {status: 'activated', path: selected.path};
       return {status: 'opened', path: selected.path, sha256: result.sha256};
     },

@@ -33,3 +33,19 @@ test('denied or unknown file targets cannot trigger activation, and folders reta
 test('an ambiguous activation acknowledgement is refused before any file transfer',async()=>{
   const f=fixture({activate:()=>({window:'wrong contract'})});await f.run('list');await assert.rejects(f.run('open',{path:'note.txt'}),/boolean/);assert.equal(f.calls.length,1);
 });
+
+
+test('Open With bypasses the default window and forwards only the verified selection',async()=>{
+  const f=fixture({activate:()=>true});await f.run('list');
+  const revision='a'.repeat(64);
+  assert.equal((await f.run('open',{path:'note.txt',openWith:'spreadsheet',expectedRevision:revision})).status,'opened');
+  assert.deepEqual(f.calls.map(x=>x[0]),['read','open']);
+  assert.equal(f.calls[1][1].openWith,'spreadsheet');
+  assert.equal(f.calls[1][1].sha256,revision);
+});
+
+test('Open With refuses an intervening file change before opening or activating any app',async()=>{
+  const f=fixture({activate:()=>true});await f.run('list');
+  await assert.rejects(f.run('open',{path:'note.txt',openWith:'spreadsheet',expectedRevision:'b'.repeat(64)}),/changed/);
+  assert.deepEqual(f.calls,[['read','note.txt']]);
+});

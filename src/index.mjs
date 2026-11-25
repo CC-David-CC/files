@@ -11,14 +11,29 @@ const NewFolder = defineFileAction({id: 'webos_new_folder', button: {name: 'New 
 const Rename = defineFileAction({id: 'webos_rename', requiresSelection: true, button: {name: 'Rename', toolbar: true, contextMenu: true, icon: ChonkyIconName.text}});
 const Move = defineFileAction({id: 'webos_move', requiresSelection: true, button: {name: 'Move', toolbar: true, contextMenu: true, icon: ChonkyIconName.folder}});
 const Download = defineFileAction({id: 'webos_download', requiresSelection: true, button: {name: 'Download', toolbar: true, contextMenu: true, icon: ChonkyIconName.download}});
+const openWithAction = openChoices => defineFileAction({
+  id:'webos_open_with', requiresSelection:true,
+  fileFilter:file=>!file.isDir && openChoices(file.id).length>1,
+  button:{name:'Open With…',toolbar:true,contextMenu:true}
+});
 const Remove = defineFileAction({id: 'webos_remove', requiresSelection: true, hotkeys: ['delete'], button: {name: 'Delete', toolbar: true, contextMenu: true, icon: ChonkyIconName.trash}});
 
-function ask({title, value, fieldLabel = 'Name', danger = false, items, signal}) {
+function ask({title, value, choices, fieldLabel = 'Name', danger = false, items, signal}) {
   if (signal.aborted) return Promise.resolve(null);
-  const dialog = document.createElement('dialog'), form = document.createElement('form'), heading = document.createElement('h2'), label = document.createElement('label'), input = document.createElement('input'), actions = document.createElement('div');
+  const dialog = document.createElement('dialog'), form = document.createElement('form'), heading = document.createElement('h2'), label = document.createElement('label'), input = document.createElement(choices ? 'select' : 'input'), actions = document.createElement('div');
   dialog.className = 'webos-files-dialog'; heading.textContent = title; heading.id = 'files-dialog-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', heading.id);
-  const cancel = document.createElement('button'), submit = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; submit.type = 'submit'; submit.textContent = danger ? 'Delete' : 'Continue';
-  if (value !== undefined) { label.textContent = fieldLabel; input.value = value; input.required = true; label.append(input); form.append(label); }
+  const cancel = document.createElement('button'), submit = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; submit.type = 'submit'; submit.textContent = choices ? 'Open' : danger ? 'Delete' : 'Continue';
+  if (choices) {
+    for (const {id,label: text} of choices) {
+      const option = document.createElement('option'); option.value = id; option.textContent = text; input.append(option);
+    }
+  }
+  const hasField = choices || value !== undefined;
+  if (hasField) {
+    label.textContent = fieldLabel;
+    if (!choices) input.value = value;
+    input.required = true; label.append(input); form.append(label);
+  }
   if (items) {
     const list = document.createElement('ul');
     for (const item of items) { const li = document.createElement('li'); li.textContent = item.name + (item.directory ? ' (folder)' : ''); list.append(li); }
@@ -29,13 +44,14 @@ function ask({title, value, fieldLabel = 'Name', danger = false, items, signal})
   return new Promise(resolve => {
     let done = false; const finish = result => { if (done) return; done = true; signal.removeEventListener('abort', abort); dialog.close(); dialog.remove(); resolve(result); };
     const abort = () => finish(null); signal.addEventListener('abort', abort, {once: true}); cancel.addEventListener('click', () => finish(null));
-    form.addEventListener('submit', e => { e.preventDefault(); finish(value === undefined ? true : input.value); }); dialog.addEventListener('cancel', e => { e.preventDefault(); finish(null); });
+    form.addEventListener('submit', e => { e.preventDefault(); finish(hasField ? input.value : true); }); dialog.addEventListener('cancel', e => { e.preventDefault(); finish(null); });
     if (signal.aborted) return abort();
-    try { dialog.showModal(); (value === undefined ? cancel : input).focus(); input.select(); } catch { finish(null); }
+    try { dialog.showModal(); (hasField ? input : cancel).focus(); if (!choices) input.select(); } catch { finish(null); }
   });
 }
 
-function FilesView({controller, execute, signal, downloads, onRefresh, temporary}) {
+function FilesView({controller, execute, signal, downloads, onRefresh, openChoices, temporary}) {
+  const OpenWith = React.useMemo(() => openWithAction(openChoices), [openChoices]);
   const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false);
   const upload = useRef(null), uploadTarget = useRef(null), taskActive = useRef(false);
   useEffect(() => controller.subscribe(setState), [controller]);
@@ -113,7 +129,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, temporary
     if (event.id === Upload.id) { beginUpload(); return; }
     // Chonky's parent-arrow action already dispatches OpenFiles for the
     // breadcrumb parent. Handle that result once, not both notifications.
-    if (![ChonkyActions.OpenFiles.id, NewFolder.id, Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
+    if (![ChonkyActions.OpenFiles.id, NewFolder.id, Rename.id, Move.id, Remove.id, Download.id, OpenWith.id].includes(event.id)) return;
     await task(async () => {
       if (event.id === ChonkyActions.OpenFiles.id) {
         const item = event.payload?.targetFile || event.payload?.files?.[0];
@@ -122,7 +138,16 @@ function FilesView({controller, execute, signal, downloads, onRefresh, temporary
         return execute('open', {path: item.id});
       }
       if (event.id === NewFolder.id) { const name = await ask({title: 'New folder', value: '', signal}); if (name !== null) await execute('mkdir', {name}); return; }
-      if (![Rename.id, Move.id, Remove.id, Download.id].includes(event.id)) return;
+      if (event.id === OpenWith.id) {
+        const selection = event.state?.selectedFiles || [];
+        if (selection.length !== 1 || selection[0].isDir) throw Error('Select one file to open.');
+        const item = await selected(event);
+        const choices = openChoices(item.path);
+        if (choices.length < 2 || signal.aborted) return;
+        const opener = await ask({title:'Open '+item.name+' with',fieldLabel:'Application',choices,signal});
+        if (opener !== null) await execute('open',{path:item.path,openWith:opener,expectedRevision:item.sha256});
+        return;
+      }
       if (event.id === Remove.id) {
         const selection = [...(event.state?.selectedFilesForAction || event.state?.selectedFiles || [])];
         if (!selection.length) throw Error('Select files or folders to delete.');
@@ -162,7 +187,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, temporary
     h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
       h(FileBrowser, {files, folderChain: chain, onFileAction: action,
-        iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true, clearSelectionOnOutsideClick: false},
+        iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, OpenWith, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true, clearSelectionOnOutsideClick: false},
         h(FileNavbar),
         h('div', {className: 'webos-files-toolbar'}, h(FileToolbar, {layout: 'inline'}, h('button', {type: 'button', className: 'webos-files-upload', disabled: state.busy || pending, onClick: beginUpload},
           h(ChonkyIconFA, {icon: ChonkyIconName.upload}), 'Upload'))),
@@ -170,14 +195,14 @@ function FilesView({controller, execute, signal, downloads, onRefresh, temporary
     h('div', {className: 'webos-files-status', role: 'status'}, status));
 }
 
-export function mount({files, instanceId, sessionId, authority, authorize, openFile, activateFile, signal: parentSignal, onRefresh}) {
+export function mount({files, instanceId, sessionId, authority, authorize, openFile, activateFile, signal: parentSignal, onRefresh, openChoices = () => []}) {
   const controller = createFilesController({files, instanceId, sessionId, authorize, openFile, activateFile}), element = document.createElement('div');
   element.className = 'webos-files'; const root = createRoot(element), abort = new AbortController(), downloads = new Map(); let disposed = false;
   const execute = (operation, args = {}) => controller.execute({instanceId, sessionId, operation, args}, authority);
   function dispose() { if (disposed) return; disposed = true; parentSignal?.removeEventListener('abort', dispose); abort.abort(); root.unmount(); controller.dispose(); for (const [url, timer] of downloads) { clearTimeout(timer); URL.revokeObjectURL(url); } downloads.clear(); element.remove(); }
   if (parentSignal?.aborted) { dispose(); throw new DOMException('Files startup cancelled.', 'AbortError'); }
   parentSignal?.addEventListener('abort', dispose, {once: true});
-  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh, temporary:files.temporary === true}));
+  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh, openChoices, temporary:files.temporary === true}));
   const ready = execute('list'); ready.catch(() => {});
   return Object.freeze({element, dispose, ready, inspect: controller.inspect, execute, requestClose: () => !controller.inspect().busy});
 }
