@@ -18,11 +18,11 @@ const openWithAction = openChoices => defineFileAction({
 });
 const Remove = defineFileAction({id: 'webos_remove', requiresSelection: true, hotkeys: ['delete'], button: {name: 'Delete', toolbar: true, contextMenu: true, icon: ChonkyIconName.trash}});
 
-function ask({title, value, choices, fieldLabel = 'Name', danger = false, items, signal}) {
+function ask({title, value, choices, fieldLabel = 'Name', danger = false, items, signal, selectDestination, confirmLabel}) {
   if (signal.aborted) return Promise.resolve(null);
   const dialog = document.createElement('dialog'), form = document.createElement('form'), heading = document.createElement('h2'), label = document.createElement('label'), input = document.createElement(choices ? 'select' : 'input'), actions = document.createElement('div');
   dialog.className = 'webos-files-dialog'; heading.textContent = title; heading.id = 'files-dialog-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', heading.id);
-  const cancel = document.createElement('button'), submit = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; submit.type = 'submit'; submit.textContent = choices ? 'Open' : danger ? 'Delete' : 'Continue';
+  const cancel = document.createElement('button'), submit = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; submit.type = 'submit'; submit.textContent = confirmLabel ?? (choices ? 'Open' : danger ? 'Delete' : 'Continue');
   if (choices) {
     for (const {id,label: text} of choices) {
       const option = document.createElement('option'); option.value = id; option.textContent = text; input.append(option);
@@ -33,6 +33,15 @@ function ask({title, value, choices, fieldLabel = 'Name', danger = false, items,
     label.textContent = fieldLabel;
     if (!choices) input.value = value;
     input.required = true; label.append(input); form.append(label);
+  }
+  const browse = selectDestination ? document.createElement('button') : null;
+  const pickerError = browse ? document.createElement('p') : null;
+  if (browse) {
+    browse.type = 'button';
+    browse.textContent = 'Choose folder…';
+    pickerError.hidden = true;
+    pickerError.setAttribute('role', 'status');
+    form.append(browse, pickerError);
   }
   if (items) {
     const list = document.createElement('ul');
@@ -45,12 +54,35 @@ function ask({title, value, choices, fieldLabel = 'Name', danger = false, items,
     let done = false; const finish = result => { if (done) return; done = true; signal.removeEventListener('abort', abort); dialog.close(); dialog.remove(); resolve(result); };
     const abort = () => finish(null); signal.addEventListener('abort', abort, {once: true}); cancel.addEventListener('click', () => finish(null));
     form.addEventListener('submit', e => { e.preventDefault(); finish(hasField ? input.value : true); }); dialog.addEventListener('cancel', e => { e.preventDefault(); finish(null); });
+    browse?.addEventListener('click', async () => {
+      browse.disabled = true;
+      pickerError.hidden = true;
+      let destination;
+      try { destination = await selectDestination(); }
+      catch (error) {
+        if (done) return;
+        pickerError.textContent = error.message;
+        pickerError.hidden = false;
+      }
+      if (done) return;
+      browse.disabled = false;
+      if (destination == null) {
+        browse.focus();
+        return;
+      }
+      input.value = destination;
+      input.focus();
+    });
     if (signal.aborted) return abort();
-    try { dialog.showModal(); (hasField ? input : cancel).focus(); if (!choices) input.select(); } catch { finish(null); }
+    try {
+      dialog.showModal();
+      (browse ?? (hasField ? input : cancel)).focus();
+      if (!browse && !choices) input.select();
+    } catch { finish(null); }
   });
 }
 
-function FilesView({controller, execute, signal, downloads, onRefresh, openChoices, temporary, darkMode}) {
+function FilesView({controller, execute, signal, downloads, onRefresh, openChoices, pickMoveFolder, temporary, darkMode}) {
   const OpenWith = React.useMemo(() => openWithAction(openChoices), [openChoices]);
   const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false);
   const upload = useRef(null), uploadTarget = useRef(null), taskActive = useRef(false);
@@ -182,7 +214,16 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
       }
       const item = await selected(event); if (signal.aborted) return;
       if (event.id === Rename.id) { const name = await ask({title: 'Rename ' + item.name, value: item.name, signal}); if (name !== null) await execute('rename', {path: item.path, name, expectedRevision: item.sha256}); }
-      if (event.id === Move.id) { const destination = await ask({title: 'Move ' + item.name, fieldLabel: 'Destination path in My files', value: item.path, signal}); if (destination !== null) await execute('move', {path: item.path, destination, expectedRevision: item.sha256}); }
+      if (event.id === Move.id) {
+        const selectDestination = pickMoveFolder && (async () => {
+          const folder = await pickMoveFolder(signal);
+          if (folder === null) return null;
+          return folder === '/' ? item.name : folder.slice(1) + '/' + item.name;
+        });
+        const destination = await ask({title: 'Move ' + item.name, fieldLabel: 'Destination path in My files', value: item.path,
+          selectDestination, confirmLabel: 'Move', signal});
+        if (destination !== null) await execute('move', {path: item.path, destination, expectedRevision: item.sha256});
+      }
       if (event.id === Download.id) {
         const result = await execute('download', {path: item.path, expectedRevision: item.sha256}); if (signal.aborted) return;
         const url = URL.createObjectURL(new Blob([result.data])), link = document.createElement('a'); link.href = url; link.download = result.name; link.hidden = true; document.body.append(link);
@@ -218,7 +259,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
     h('div', {className: 'webos-files-status', role: 'status'}, status));
 }
 
-export function mount({files, instanceId, sessionId, authority, authorize, openFile, activateFile, signal: parentSignal, onRefresh, openChoices = () => []}) {
+export function mount({files, instanceId, sessionId, authority, authorize, openFile, activateFile, signal: parentSignal, onRefresh, openChoices = () => [], pickMoveFolder}) {
   const controller = createFilesController({files, instanceId, sessionId, authorize, openFile, activateFile}), element = document.createElement('div');
   element.className = 'webos-files'; const root = createRoot(element), abort = new AbortController(), downloads = new Map(); let disposed = false;
   const execute = (operation, args = {}) => controller.execute({instanceId, sessionId, operation, args}, authority);
@@ -226,7 +267,7 @@ export function mount({files, instanceId, sessionId, authority, authorize, openF
   if (parentSignal?.aborted) { dispose(); throw new DOMException('Files startup cancelled.', 'AbortError'); }
   parentSignal?.addEventListener('abort', dispose, {once: true});
   const darkMode = getComputedStyle(document.documentElement).colorScheme === 'dark';
-  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh, openChoices,
+  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh, openChoices, pickMoveFolder,
     temporary: files.temporary === true, darkMode}));
   const ready = execute('list'); ready.catch(() => {});
   return Object.freeze({element, dispose, ready, inspect: controller.inspect, execute, requestClose: () => !controller.inspect().busy});
