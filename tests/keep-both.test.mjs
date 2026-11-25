@@ -77,13 +77,14 @@ test('a revision change after upload preserves the confirmed copy and reports th
   assert.deepEqual(calls.map(call => call[0]), ['capture','write','resolve','release']);
 });
 
-test('cancel deletion restores only the exact conflicted file tombstone', async () => {
+test('cancel deletion selects only the exact conflicted file or folder tombstone', async () => {
   let item = {path:'/'+conflictPath,version:revision,deleted:true,directory:false,status:'conflict'};
   const calls = [];
   const files = {check() {}, async list(){return {entries:[]};}};
   const mirror = {
     async list(path) { assert.equal(path,'/'); return {entries:[item]}; },
-    async resolve(path,choice,expected) {calls.push([path,choice,expected]);}
+    async resolve(path,choice,expected) {calls.push([path,choice,expected]);},
+    async cancelFolderDeletion(path,expected) {calls.push([path,expected]);}
   };
   const controller = createFilesController({files,instanceId:'files',sessionId:'owner',
     authorize:async () => true,openFile() {},openConflictMirror:async () => mirror});
@@ -95,6 +96,9 @@ test('cancel deletion restores only the exact conflicted file tombstone', async 
   item = {...item,deleted:true};
   assert.equal((await execute()).status,'resolved');
   assert.deepEqual(calls,[['/'+conflictPath,'server',revision]]);
+  item = {...item,directory:true};
+  assert.equal((await execute()).status,'resolved');
+  assert.deepEqual(calls.at(-1),['/'+conflictPath,revision]);
 });
 
 test('folder recovery creates a separate tree and checks for partial completion', async () => {

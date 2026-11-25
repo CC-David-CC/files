@@ -131,7 +131,7 @@ function useConflicts(openConflictMirror, directory, signal) {
       try {
         const result = await mirror.list('/' + directory);
         if (active && !signal.aborted && request === revision) {
-          setListing({directory, entries: result.entries.filter(item => item.status === 'conflict' && (!item.directory || !item.deleted))});
+          setListing({directory, entries: result.entries.filter(item => item.status === 'conflict')});
         }
       } catch {
         if (active && !signal.aborted && request === revision) setListing(null);
@@ -193,7 +193,9 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
   function cancelDeletion(item) {
     void task(async () => {
       const confirmed = await ask({title: 'Cancel pending deletion of ' + item.name,
-        description: 'Keep the account version. This cancels the pending deletion on this device.',
+        description: item.directory
+          ? 'Keep the account version. This cancels pending deletions for this folder and its contents on this device.'
+          : 'Keep the account version. This cancels the pending deletion on this device.',
         confirmLabel: 'Cancel deletion', cancelLabel: 'Go back', signal});
       if (!confirmed || signal.aborted) return;
       await execute('cancel-delete', {path: item.path.slice(1), expectedRevision: item.version});

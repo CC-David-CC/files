@@ -118,11 +118,14 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       check();
       const {entries: conflicts} = await mirror.list('/' + directory);
       check();
-      if (!conflicts.some(item => item.path === '/' + value && item.version === expectedRevision
-          && item.deleted && !item.directory && item.status === 'conflict')) {
-        throw Error('The pending deletion changed. Select it again.');
+      const selected = conflicts.find(item => item.path === '/' + value && item.version === expectedRevision
+        && item.deleted && item.status === 'conflict');
+      if (!selected) throw Error('The pending deletion changed. Select it again.');
+      if (selected.directory) {
+        await mirror.cancelFolderDeletion(selected.path, expectedRevision);
+      } else {
+        await mirror.resolve(selected.path, 'server', expectedRevision);
       }
-      await mirror.resolve('/' + value, 'server', expectedRevision);
       check();
       return confirmed({status: 'resolved', path: value}, 'Cancelled the pending deletion on this device.');
     },
