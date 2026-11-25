@@ -125,6 +125,31 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
     if (items.length !== 1) throw Error('Select one file or folder.');
     return await execute('snapshot', {path: items[0].id});
   }
+  function openItem(item) {
+    if (chain.some(folder => folder.id === item.id)) return execute('list', {path: item.id === '/' ? '' : item.id});
+    return execute('open', {path: item.id});
+  }
+  function openFocusedItem(event) {
+    if (event.key !== 'Enter' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const row = event.target;
+    if (!row.matches?.('[role="listitem"][data-chonky-context-file-id]')) return;
+    const item = files.find(file => file.id === row.dataset.chonkyContextFileId);
+    if (!item) return;
+    // Chonky's Enter opens the selection before checking the focused row.
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.repeat) return;
+    void task(() => {
+      // The current row is about to disappear. Move focus to the list so
+      // pressing Tab again starts with the new folder's contents.
+      const list = item.isDir && row.closest('[role="list"]');
+      if (list) {
+        list.tabIndex = -1;
+        list.focus({preventScroll: true});
+      }
+      return openItem(item);
+    });
+  }
   async function action(event) {
     if (event.id === Upload.id) { beginUpload(); return; }
     // Chonky's parent-arrow action already dispatches OpenFiles for the
@@ -133,9 +158,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
     await task(async () => {
       if (event.id === ChonkyActions.OpenFiles.id) {
         const item = event.payload?.targetFile || event.payload?.files?.[0];
-        if (!item) return;
-        if (chain.some(folder => folder.id === item.id)) return execute('list', {path: item.id === '/' ? '' : item.id});
-        return execute('open', {path: item.id});
+        if (item) return openItem(item);
       }
       if (event.id === NewFolder.id) { const name = await ask({title: 'New folder', value: '', signal}); if (name !== null) await execute('mkdir', {name}); return; }
       if (event.id === OpenWith.id) {
@@ -184,7 +207,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
         if (!signal.aborted) await onRefresh?.();
       })}, 'Refresh')),
     h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files'}),
-    h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending},
+    h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending, onKeyDownCapture: openFocusedItem},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
       h(FileBrowser, {files, folderChain: chain, onFileAction: action, darkMode,
         iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, OpenWith, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true, clearSelectionOnOutsideClick: false},
