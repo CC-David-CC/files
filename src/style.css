@@ -48,7 +48,7 @@
 }
 
 /* Keep the primary action readable when Chonky hides other toolbar labels. */
-.webos-files-toolbar button[aria-label="Open"] > [data-chonky-toolbar-label] {
+.webos-files .webos-files-toolbar button[aria-label="Open"] > [data-chonky-toolbar-label] {
   display: inline;
 }
 @media (pointer: coarse) {
