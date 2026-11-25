@@ -15,6 +15,24 @@
 
 .webos-files-upload{display:inline-flex;align-items:center;gap:6px;margin:0 8px;padding:6px 8px;border:0;background:transparent;color:#1976d2;font:inherit;cursor:pointer}.webos-files-upload:disabled{color:#aaa;cursor:default}.webos-files-upload svg{width:1em;height:1em}
 .webos-files-dialog ul{max-height:35vh;overflow:auto;overflow-wrap:anywhere;padding-left:24px}.webos-files-dialog p{max-width:440px}
+.webos-files-app-choices {
+  min-width: 0;
+  margin: 0;
+  padding: 0 8px 4px;
+  border: 1px solid var(--files-border);
+  border-radius: 4px;
+}
+.webos-files-dialog .webos-files-app-choices label {
+  flex-direction: row;
+  align-items: center;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+.webos-files-app-choices input[type="radio"] {
+  flex: none;
+  margin: 0;
+  padding: 0;
+}
 
 .webos-files-toolbar { container-type: inline-size; }
 /* Keep the summary and upload control together when the actions need another row. */

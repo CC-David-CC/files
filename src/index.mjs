@@ -26,18 +26,33 @@ const Remove = defineFileAction({id: 'webos_remove', requiresSelection: true, ho
 
 function ask({title, value, choices, fieldLabel = 'Name', danger = false, items, signal, selectDestination, confirmLabel}) {
   if (signal.aborted) return Promise.resolve(null);
-  const dialog = document.createElement('dialog'), form = document.createElement('form'), heading = document.createElement('h2'), label = document.createElement('label'), input = document.createElement(choices ? 'select' : 'input'), actions = document.createElement('div');
+  const dialog = document.createElement('dialog'), form = document.createElement('form'), heading = document.createElement('h2'), actions = document.createElement('div');
+  const input = !choices && value !== undefined ? document.createElement('input') : null;
+  let initialFocus = input;
   dialog.className = 'webos-files-dialog'; heading.textContent = title; heading.id = 'files-dialog-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', heading.id);
   const cancel = document.createElement('button'), submit = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; submit.type = 'submit'; submit.textContent = confirmLabel ?? (choices ? 'Open' : danger ? 'Delete' : 'Continue');
   if (choices) {
+    const group = document.createElement('fieldset'), legend = document.createElement('legend');
+    group.className = 'webos-files-app-choices';
+    legend.textContent = fieldLabel;
+    group.append(legend);
     for (const {id,label: text} of choices) {
-      const option = document.createElement('option'); option.value = id; option.textContent = text; input.append(option);
+      const label = document.createElement('label'), radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'application';
+      radio.value = id;
+      if (!initialFocus) {
+        radio.checked = true;
+        initialFocus = radio;
+      }
+      label.append(radio, text);
+      group.append(label);
     }
-  }
-  const hasField = choices || value !== undefined;
-  if (hasField) {
+    form.append(group);
+  } else if (input) {
+    const label = document.createElement('label');
     label.textContent = fieldLabel;
-    if (!choices) input.value = value;
+    input.value = value;
     input.required = true; label.append(input); form.append(label);
   }
   const browse = selectDestination ? document.createElement('button') : null;
@@ -59,7 +74,11 @@ function ask({title, value, choices, fieldLabel = 'Name', danger = false, items,
   return new Promise(resolve => {
     let done = false; const finish = result => { if (done) return; done = true; signal.removeEventListener('abort', abort); dialog.close(); dialog.remove(); resolve(result); };
     const abort = () => finish(null); signal.addEventListener('abort', abort, {once: true}); cancel.addEventListener('click', () => finish(null));
-    form.addEventListener('submit', e => { e.preventDefault(); finish(hasField ? input.value : true); }); dialog.addEventListener('cancel', e => { e.preventDefault(); finish(null); });
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      finish(choices ? new FormData(form).get('application') : (input ? input.value : true));
+    });
+    dialog.addEventListener('cancel', e => { e.preventDefault(); finish(null); });
     browse?.addEventListener('click', async () => {
       browse.disabled = true;
       pickerError.hidden = true;
@@ -82,8 +101,8 @@ function ask({title, value, choices, fieldLabel = 'Name', danger = false, items,
     if (signal.aborted) return abort();
     try {
       dialog.showModal();
-      (browse ?? (hasField ? input : cancel)).focus();
-      if (!browse && !choices) input.select();
+      (browse ?? initialFocus ?? cancel).focus();
+      if (!browse && input) input.select();
     } catch { finish(null); }
   });
 }
