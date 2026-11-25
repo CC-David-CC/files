@@ -28,3 +28,42 @@
     flex-wrap: wrap;
   }
 }
+
+/* Follow the desktop's explicit scheme, even when the browser prefers Light. */
+:is(.webos-files, .webos-files-dialog) {
+  --files-surface: light-dark(#fff, var(--desktop-surface, #252a30));
+  --files-raised: light-dark(#f5f4f1, var(--desktop-raised, #353d46));
+  --files-border: light-dark(#8e989c, var(--desktop-border, #56616c));
+  --files-text: light-dark(#272d30, var(--desktop-text, #f3f6f8));
+  --files-muted: light-dark(#4d575c, var(--desktop-muted, #b9c3cc));
+}
+.webos-files,
+.webos-files-view,
+.webos-files-dialog {
+  background: var(--files-surface);
+  color: var(--files-text);
+}
+.webos-files-bar, .webos-files-status {
+  background: var(--files-raised);
+  border-color: var(--files-border);
+}
+.webos-files-bar span { color: var(--files-muted); }
+.webos-files-bar button,
+.webos-files-dialog button,
+.webos-files-dialog input {
+  background: var(--files-surface);
+  border: 1px solid var(--files-border);
+  color: var(--files-text);
+}
+.webos-files-bar button:disabled {
+  background: var(--files-raised);
+  color: var(--files-muted);
+}
+.webos-files-upload { color: light-dark(#195da8, #9fcaff); }
+.webos-files-upload:disabled { color: var(--files-muted); }
+.webos-files-dialog { border-color: var(--files-border); }
+.webos-files-drop-overlay {
+  background: light-dark(#dbeafaed, #142e46f4);
+  border-color: light-dark(#24518a, #9fcaff);
+  color: light-dark(#173a65, #e9f3ff);
+}

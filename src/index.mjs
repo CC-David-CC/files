@@ -50,7 +50,7 @@ function ask({title, value, choices, fieldLabel = 'Name', danger = false, items,
   });
 }
 
-function FilesView({controller, execute, signal, downloads, onRefresh, openChoices, temporary}) {
+function FilesView({controller, execute, signal, downloads, onRefresh, openChoices, temporary, darkMode}) {
   const OpenWith = React.useMemo(() => openWithAction(openChoices), [openChoices]);
   const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false);
   const upload = useRef(null), uploadTarget = useRef(null), taskActive = useRef(false);
@@ -186,7 +186,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
     h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files'}),
     h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
-      h(FileBrowser, {files, folderChain: chain, onFileAction: action,
+      h(FileBrowser, {files, folderChain: chain, onFileAction: action, darkMode,
         iconComponent: ChonkyIconFA, fileActions: [Upload, NewFolder, OpenWith, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true, clearSelectionOnOutsideClick: false},
         h(FileNavbar),
         h('div', {className: 'webos-files-toolbar'}, h(FileToolbar, {layout: 'inline'}, h('button', {type: 'button', className: 'webos-files-upload', disabled: state.busy || pending, onClick: beginUpload},
@@ -202,7 +202,9 @@ export function mount({files, instanceId, sessionId, authority, authorize, openF
   function dispose() { if (disposed) return; disposed = true; parentSignal?.removeEventListener('abort', dispose); abort.abort(); root.unmount(); controller.dispose(); for (const [url, timer] of downloads) { clearTimeout(timer); URL.revokeObjectURL(url); } downloads.clear(); element.remove(); }
   if (parentSignal?.aborted) { dispose(); throw new DOMException('Files startup cancelled.', 'AbortError'); }
   parentSignal?.addEventListener('abort', dispose, {once: true});
-  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh, openChoices, temporary:files.temporary === true}));
+  const darkMode = getComputedStyle(document.documentElement).colorScheme === 'dark';
+  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh, openChoices,
+    temporary: files.temporary === true, darkMode}));
   const ready = execute('list'); ready.catch(() => {});
   return Object.freeze({element, dispose, ready, inspect: controller.inspect, execute, requestClose: () => !controller.inspect().busy});
 }
