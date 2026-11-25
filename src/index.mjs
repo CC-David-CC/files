@@ -151,6 +151,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
   const OpenWith = React.useMemo(() => openWithAction(openChoices), [openChoices]);
   const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false);
   const conflicts = useConflicts(openConflictMirror, state.directory, signal);
+  const browser = useRef(null);
   const upload = useRef(null), uploadTarget = useRef(null), taskActive = useRef(false);
   useEffect(() => controller.subscribe(setState), [controller]);
   useEffect(() => {
@@ -257,6 +258,14 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
     if (chain.some(folder => folder.id === item.id)) return execute('list', {path: item.id === '/' ? '' : item.id});
     return execute('open', {path: item.id});
   }
+  function focusFileList() {
+    // The selected row and its actions may disappear when the folder refreshes.
+    const list = browser.current?.querySelector('[role="list"]') ?? browser.current;
+    if (list) {
+      list.tabIndex = -1;
+      list.focus({preventScroll: true});
+    }
+  }
   function openFocusedItem(event) {
     if (event.key !== 'Enter' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     const row = event.target;
@@ -268,13 +277,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
     event.stopPropagation();
     if (event.repeat) return;
     void task(() => {
-      // The current row is about to disappear. Move focus to the list so
-      // pressing Tab again starts with the new folder's contents.
-      const list = item.isDir && row.closest('[role="list"]');
-      if (list) {
-        list.tabIndex = -1;
-        list.focus({preventScroll: true});
-      }
+      if (item.isDir) focusFileList();
       return openItem(item);
     });
   }
@@ -305,11 +308,20 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
         const items = [];
         for (const item of selection) { items.push(await execute('snapshot', {path: item.id})); if (signal.aborted) return; }
         const title = temporary ? 'Delete the selected items from this tab?' : items.length === 1 ? 'Delete ' + items[0].name + ' from your account?' : 'Delete ' + items.length + ' items from your account?';
-        if (await ask({title, items, danger: true, signal})) await execute('remove', {items: items.map(item => ({path: item.path, expectedRevision: item.sha256}))});
+        if (await ask({title, items, danger: true, signal}) && !signal.aborted) {
+          focusFileList();
+          await execute('remove', {items: items.map(item => ({path: item.path, expectedRevision: item.sha256}))});
+        }
         return;
       }
       const item = await selected(event); if (signal.aborted) return;
-      if (event.id === Rename.id) { const name = await ask({title: 'Rename ' + item.name, value: item.name, signal}); if (name !== null) await execute('rename', {path: item.path, name, expectedRevision: item.sha256}); }
+      if (event.id === Rename.id) {
+        const name = await ask({title: 'Rename ' + item.name, value: item.name, confirmLabel: 'Rename', signal});
+        if (name !== null && !signal.aborted) {
+          focusFileList();
+          await execute('rename', {path: item.path, name, expectedRevision: item.sha256});
+        }
+      }
       if (event.id === Move.id) {
         const selectDestination = pickMoveFolder && (async () => {
           const folder = await pickMoveFolder(signal);
@@ -318,7 +330,10 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
         });
         const destination = await ask({title: 'Move ' + item.name, fieldLabel: 'Destination path in My files', value: item.path,
           selectDestination, confirmLabel: 'Move', signal});
-        if (destination !== null) await execute('move', {path: item.path, destination, expectedRevision: item.sha256});
+        if (destination !== null && !signal.aborted) {
+          focusFileList();
+          await execute('move', {path: item.path, destination, expectedRevision: item.sha256});
+        }
       }
       if (event.id === Download.id) {
         const result = await execute('download', {path: item.path, expectedRevision: item.sha256}); if (signal.aborted) return;
@@ -351,7 +366,7 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
           'aria-label': (item.deleted ? 'Cancel pending deletion of ' : 'Keep both versions of ') + item.name,
           onClick: () => item.deleted ? cancelDeletion(item) : keepBoth(item)}, item.deleted ? 'Cancel deletion' : 'Keep both'))))),
     h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files'}),
-    h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending, onKeyDownCapture: openFocusedItem},
+    h('div', {className: 'webos-files-browser', ref: browser, 'aria-busy': state.busy || pending, onKeyDownCapture: openFocusedItem},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
       h(FileBrowser, {files, folderChain: chain, onFileAction: action, darkMode,
         iconComponent: ChonkyIconFA, fileActions: [Upload, Open, NewFolder, OpenWith, Rename, Move, Download, Remove], disableDefaultFileActions: [ChonkyActions.DeleteFiles.id], disableDragAndDrop: true, clearSelectionOnOutsideClick: false},
