@@ -131,7 +131,7 @@ function useConflicts(openConflictMirror, directory, signal) {
       try {
         const result = await mirror.list('/' + directory);
         if (active && !signal.aborted && request === revision) {
-          setListing({directory, entries: result.entries.filter(item => item.status === 'conflict' && !item.directory)});
+          setListing({directory, entries: result.entries.filter(item => item.status === 'conflict' && (!item.directory || !item.deleted))});
         }
       } catch {
         if (active && !signal.aborted && request === revision) setListing(null);
@@ -175,13 +175,17 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
   }
   function keepBoth(item) {
     void task(async () => {
-      const extension = Math.max(0, item.name.lastIndexOf('.'));
+      const extension = item.directory ? 0 : Math.max(0, item.name.lastIndexOf('.'));
       const base = extension === 0 ? item.name : item.name.slice(0, extension);
-      const name = await ask({title: 'Keep both versions of ' + item.name, fieldLabel: 'Name for the device copy',
-        description: 'The account version stays as it is. Save the edits from this device under a new name in this folder.',
-        value: base + ' (device copy)' + (extension === 0 ? '' : item.name.slice(extension)), confirmLabel: 'Keep both', signal});
+      const name = await ask({title: 'Keep both versions of ' + item.name,
+        fieldLabel: item.directory ? 'Name for the device folder' : 'Name for the device copy',
+        description: item.directory
+          ? 'Save the device folder under a new name. Account contents at the original path stay as they are.'
+          : 'The account version stays as it is. Save the edits from this device under a new name in this folder.',
+        value: base + (item.directory ? ' (device folder)' : ' (device copy)') + (extension === 0 ? '' : item.name.slice(extension)),
+        confirmLabel: 'Keep both', signal});
       if (name === null || signal.aborted) return;
-      await execute('keep-both', {path: item.path.slice(1), name, expectedRevision: item.version});
+      await execute(item.directory ? 'keep-folder' : 'keep-both', {path: item.path.slice(1), name, expectedRevision: item.version});
       // The selected conflict row may disappear. Keep keyboard focus in Files.
       conflictFocus.current?.focus({preventScroll: true});
     });

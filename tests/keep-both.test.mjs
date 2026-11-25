@@ -96,3 +96,49 @@ test('cancel deletion restores only the exact conflicted file tombstone', async 
   assert.equal((await execute()).status,'resolved');
   assert.deepEqual(calls,[['/'+conflictPath,'server',revision]]);
 });
+
+test('folder recovery creates a separate tree and checks for partial completion', async () => {
+  const calls=[];
+  const selected=[
+    {path:'/Project',directory:true,version:revision},
+    {path:'/Project/empty',directory:true,version:'dir'},
+    {path:'/Project/note.txt',directory:false,version:'file',sha256},
+  ];
+  let fail=false;
+  const files={
+    check(){},
+    async list(){return {entries:[]};},
+    async mkdir(path){calls.push(['mkdir',path]);},
+    async write(path,data,version){
+      calls.push(['write',path,await data.text(),version]);
+      if(fail)throw Error('Upload interrupted.');
+      return {sha256};
+    }
+  };
+  const mirror={
+    async conflictTree(source,expected){assert.equal(source,'/Project');assert.equal(expected,revision);return selected;},
+    async acquireSnapshot(path,options){
+      assert.equal(path,'/Project/note.txt');
+      assert.equal(options.expected,'file');
+      return {sha256,data:new Blob(['device note']),release:()=>calls.push(['release'])};
+    },
+    async resolveConflictTree(source,destination,expected,selection){
+      calls.push(['resolve',source,destination,expected]);assert.deepEqual(selection,selected);
+    }
+  };
+  const controller=createFilesController({files,instanceId:'files',sessionId:'owner',authorize:async()=>true,
+    openFile(){},openConflictMirror:async()=>mirror});
+  const run=()=>controller.execute({instanceId:'files',sessionId:'owner',operation:'keep-folder',
+    args:{path:'Project',name:'Project-copy',expectedRevision:revision}});
+  assert.equal((await run()).status,'resolved');
+  assert.deepEqual(calls,[
+    ['mkdir','Project-copy'],['mkdir','Project-copy/empty'],
+    ['write','Project-copy/note.txt','device note',null],['release'],
+    ['resolve','/Project','/Project-copy',revision]
+  ]);
+  calls.length=0;
+  fail=true;
+  assert.equal((await run()).status,'copied');
+  assert.match(controller.inspect().notice,/Copied 2 of 3.*original conflict remains open/);
+  assert.equal(calls.some(call=>call[0]==='resolve'),false);
+});

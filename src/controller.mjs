@@ -126,6 +126,44 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       check();
       return confirmed({status: 'resolved', path: value}, 'Cancelled the pending deletion on this device.');
     },
+    async 'keep-folder'({path: value, destination, expectedRevision}) {
+      const mirror = await openConflictMirror();
+      check();
+      const source = '/' + value;
+      const tree = await mirror.conflictTree(source, expectedRevision);
+      const items = tree.filter(item => !item.deleted);
+      const targets = items.map(item => path(destination + item.path.slice(source.length)));
+      const copy = {status: 'copied', path: destination, committed: true};
+      let saved = 0;
+      try {
+        for (const [index, item] of items.entries()) {
+          check();
+          const target = targets[index];
+          if (item.directory) {
+            await files.mkdir(target);
+          } else {
+            const snapshot = await mirror.acquireSnapshot(item.path, {expected: item.version, signal});
+            try {
+              check();
+              if (snapshot.sha256 !== item.sha256) throw Error('A device file changed while copying.');
+              const receipt = await files.write(target, snapshot.data.slice(), null, {signal});
+              if (receipt?.sha256 !== item.sha256) throw Error('The saved file could not be verified.');
+            } finally {
+              snapshot.release();
+            }
+          }
+          saved++;
+        }
+        check();
+        await mirror.resolveConflictTree(source, '/' + destination, expectedRevision, tree);
+        check();
+      } catch (failure) {
+        if (!saved || disposed) throw failure;
+        return confirmed(copy, 'Copied ' + saved + ' of ' + items.length + ' items to ' + destination +
+          '. The original conflict remains open. ' + failure.message);
+      }
+      return confirmed({...copy, status: 'resolved'}, 'Saved the device folder to ' + destination + ' and cleared the sync conflict.');
+    },
     async 'keep-both'({path: value, destination, expectedRevision}) {
       const mirror = await openConflictMirror();
       check();
@@ -185,14 +223,14 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       if (operation === 'import' && args.expectedDirectory !== undefined && args.expectedDirectory !== capturedDirectory) throw Error('The destination folder changed. Choose Upload again in the destination folder.');
       let destination = null;
       if (operation === 'move') destination = path(args.destination);
-      if (operation === 'keep-both' || operation === 'cancel-delete') {
+      if (['keep-both', 'keep-folder', 'cancel-delete'].includes(operation)) {
         if (typeof openConflictMirror !== 'function') throw Error('Account file conflicts are unavailable.');
         const source = path(args.path);
         if (source.slice(0, Math.max(0, source.lastIndexOf('/'))) !== capturedDirectory) throw Error('Reopen the folder with the file conflict.');
         if (typeof args.expectedRevision !== 'string' || !args.expectedRevision || args.expectedRevision.length > 128) throw TypeError('Select an exact conflict revision.');
       }
-      if (operation === 'keep-both') {
-        if (typeof args.name !== 'string' || args.name.includes('/')) throw TypeError('Enter a filename for the device copy.');
+      if (operation === 'keep-both' || operation === 'keep-folder') {
+        if (typeof args.name !== 'string' || args.name.includes('/')) throw TypeError('Enter a name for the device copy.');
         destination = path((capturedDirectory ? capturedDirectory + '/' : '') + args.name);
         if (destination === args.path) throw Error('Choose a new name for the device copy.');
         args.destination = destination;
