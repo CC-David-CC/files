@@ -99,3 +99,9 @@
   border-color: light-dark(#24518a, #9fcaff);
   color: light-dark(#173a65, #e9f3ff);
 }
+
+.webos-files-conflicts{flex:0 1 auto;max-height:32%;overflow:auto;padding:6px 10px;border-bottom:1px solid currentColor}
+.webos-files-conflicts ul{list-style:none;margin:4px 0 0;padding:0}
+.webos-files-conflicts li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0}
+.webos-files-conflicts li span{overflow-wrap:anywhere}
+.webos-files-conflicts button{flex:none;min-height:44px}

@@ -1,5 +1,5 @@
 /** Per-instance browsing state over a shared server-authoritative file service. */
-export function createFilesController({files, instanceId, sessionId, authorize, openFile, activateFile = () => false}) {
+export function createFilesController({files, instanceId, sessionId, authorize, openFile, activateFile = () => false, openConflictMirror, signal}) {
   if (!files || !instanceId || !sessionId || typeof authorize !== 'function' || typeof openFile !== 'function' || typeof activateFile !== 'function') throw TypeError('Explicit Files dependencies and target identities required.');
   let directory = '', entries = [], busy = false, disposed = false, error = '', notice = '', revision = 0;
   const listeners = new Set();
@@ -113,6 +113,45 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       return confirmed({status: 'deleted', committed: true, deletedPaths, deletedCount: deletedPaths.length, total: items.length},
         files.temporary ? 'Deleted from this tab.' : items.length === 1 ? 'Deleted from your account.' : 'Deleted ' + deletedPaths.length + ' items from your account.');
     },
+    async 'keep-both'({path: value, destination, expectedRevision}) {
+      const mirror = await openConflictMirror();
+      check();
+      // The new account file must contain this exact local conflict revision.
+      // Keep the source lease until the server write and receipt are confirmed.
+      const snapshot = await mirror.acquireSnapshot('/' + value, {expected: expectedRevision, signal});
+      try {
+        check();
+        if (snapshot.status !== 'conflict') throw Error('The file conflict changed. Select it again.');
+        let receipt;
+        try {
+          receipt = await files.write(destination, snapshot.data.slice(), null, {signal});
+        } catch (failure) {
+          if (failure.status !== 409 && failure.outcome !== 'unknown') throw failure;
+          // A retry can reuse an already-saved copy with identical contents.
+          const existing = await files.version(destination).catch(() => null);
+          if (existing?.sha256 !== snapshot.sha256) {
+            if (failure.status === 409) throw Error('That filename already exists. Choose a different name.');
+            throw failure;
+          }
+          receipt = existing;
+        }
+        check();
+        if (receipt?.sha256 !== snapshot.sha256) throw Error('The saved copy could not be verified. Refresh Files before trying again.');
+        const result = {status: 'copied', path: destination, sha256: receipt.sha256, committed: true};
+        try {
+          // Resolve only the selected local revision, even if another tab edited
+          // the original while the separate account copy was being uploaded.
+          await mirror.resolve('/' + value, 'server', expectedRevision);
+          check();
+        } catch (failure) {
+          if (disposed) throw Object.assign(failure, {committed: true});
+          return confirmed(result, 'Saved a copy to ' + destination + '. The original still needs attention: ' + failure.message);
+        }
+        return confirmed({...result, status: 'resolved'}, 'Saved the device copy to ' + destination + ' and cleared the sync conflict.');
+      } finally {
+        snapshot.release();
+      }
+    },
     async download({path: value, expectedRevision}) {
       const selected = entry(value); if (selected.directory) throw Error('Choose a file.');
       const result = await files.read(selected.path); check();
@@ -133,6 +172,16 @@ export function createFilesController({files, instanceId, sessionId, authorize, 
       if (operation === 'import' && args.expectedDirectory !== undefined && args.expectedDirectory !== capturedDirectory) throw Error('The destination folder changed. Choose Upload again in the destination folder.');
       let destination = null;
       if (operation === 'move') destination = path(args.destination);
+      if (operation === 'keep-both') {
+        if (typeof openConflictMirror !== 'function') throw Error('Account file conflicts are unavailable.');
+        const source = path(args.path);
+        if (source.slice(0, Math.max(0, source.lastIndexOf('/'))) !== capturedDirectory) throw Error('Reopen the folder with the file conflict.');
+        if (typeof args.expectedRevision !== 'string' || !args.expectedRevision || args.expectedRevision.length > 128) throw TypeError('Select an exact conflict revision.');
+        if (typeof args.name !== 'string' || args.name.includes('/')) throw TypeError('Enter a filename for the device copy.');
+        destination = path((capturedDirectory ? capturedDirectory + '/' : '') + args.name);
+        if (destination === source) throw Error('Choose a new name for the device copy.');
+        args.destination = destination;
+      }
       if (['import', 'mkdir', 'rename'].includes(operation)) {
         if (typeof args.name !== 'string' || args.name.includes('/')) throw TypeError('A file or folder name is required.');
         destination = path((capturedDirectory ? capturedDirectory + '/' : '') + args.name);

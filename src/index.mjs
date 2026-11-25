@@ -30,7 +30,7 @@ const openWithAction = openChoices => defineFileAction({
 });
 const Remove = defineFileAction({id: 'webos_remove', requiresSelection: true, hotkeys: ['delete'], button: {name: 'Delete', toolbar: true, contextMenu: true, icon: ChonkyIconName.trash}});
 
-function ask({title, value, choices, fieldLabel = 'Name', danger = false, items, signal, selectDestination, confirmLabel}) {
+function ask({title, value, choices, description, fieldLabel = 'Name', danger = false, items, signal, selectDestination, confirmLabel}) {
   if (signal.aborted) return Promise.resolve(null);
   const dialog = document.createElement('dialog'), form = document.createElement('form'), heading = document.createElement('h2'), actions = document.createElement('div');
   const input = !choices && value !== undefined ? document.createElement('input') : null;
@@ -76,7 +76,15 @@ function ask({title, value, choices, fieldLabel = 'Name', danger = false, items,
     form.append(list);
     if (items.some(item => item.directory)) { const note = document.createElement('p'); note.textContent = 'Only empty folders can be deleted. Deletion stops if an item cannot be deleted.'; form.append(note); }
   }
-  actions.append(cancel, submit); form.prepend(heading); form.append(actions); dialog.append(form); document.body.append(dialog);
+  actions.append(cancel, submit);
+  if (description) {
+    const detail = document.createElement('p');
+    detail.textContent = description;
+    detail.id = heading.id + '-detail';
+    dialog.setAttribute('aria-describedby', detail.id);
+    form.prepend(detail);
+  }
+  form.prepend(heading); form.append(actions); dialog.append(form); document.body.append(dialog);
   return new Promise(resolve => {
     let done = false; const finish = result => { if (done) return; done = true; signal.removeEventListener('abort', abort); dialog.close(); dialog.remove(); resolve(result); };
     const abort = () => finish(null); signal.addEventListener('abort', abort, {once: true}); cancel.addEventListener('click', () => finish(null));
@@ -113,9 +121,36 @@ function ask({title, value, choices, fieldLabel = 'Name', danger = false, items,
   });
 }
 
-function FilesView({controller, execute, signal, downloads, onRefresh, openChoices, pickMoveFolder, temporary, darkMode}) {
+function useConflicts(openConflictMirror, directory, signal) {
+  const [listing, setListing] = useState(null);
+  useEffect(() => {
+    if (!openConflictMirror) return;
+    let active = true, revision = 0, unsubscribe;
+    const refresh = async mirror => {
+      const request = ++revision;
+      try {
+        const result = await mirror.list('/' + directory);
+        if (active && !signal.aborted && request === revision) {
+          setListing({directory, entries: result.entries.filter(item => item.status === 'conflict' && !item.directory && !item.deleted)});
+        }
+      } catch {
+        if (active && !signal.aborted && request === revision) setListing(null);
+      }
+    };
+    void openConflictMirror().then(mirror => {
+      if (!active || signal.aborted) return;
+      unsubscribe = mirror.subscribe(() => { void refresh(mirror); });
+      return refresh(mirror);
+    }).catch(() => { if (active && !signal.aborted) setListing(null); });
+    return () => { active = false; unsubscribe?.(); };
+  }, [openConflictMirror, directory, signal]);
+  return listing?.directory === directory ? listing.entries : [];
+}
+
+function FilesView({controller, execute, signal, downloads, onRefresh, openChoices, pickMoveFolder, openConflictMirror, temporary, darkMode}) {
   const OpenWith = React.useMemo(() => openWithAction(openChoices), [openChoices]);
   const [state, setState] = useState(controller.inspect), [message, setMessage] = useState(''), [pending, setPending] = useState(false), [dropActive, setDropActive] = useState(false);
+  const conflicts = useConflicts(openConflictMirror, state.directory, signal);
   const upload = useRef(null), uploadTarget = useRef(null), taskActive = useRef(false);
   useEffect(() => controller.subscribe(setState), [controller]);
   useEffect(() => {
@@ -138,6 +173,20 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
     catch (error) { if (!signal.aborted) setMessage(error.message + (error.outcome === 'unknown' ? ' The server outcome is unknown; refresh before retrying.' : '')); }
     finally { taskActive.current = false; if (!signal.aborted) setPending(false); }
   }
+  function keepBoth(item) {
+    void task(async () => {
+      const extension = Math.max(0, item.name.lastIndexOf('.'));
+      const base = extension === 0 ? item.name : item.name.slice(0, extension);
+      const name = await ask({title: 'Keep both versions of ' + item.name, fieldLabel: 'Name for the device copy',
+        description: 'The account version stays as it is. Save the edits from this device under a new name in this folder.',
+        value: base + ' (device copy)' + (extension === 0 ? '' : item.name.slice(extension)), confirmLabel: 'Keep both', signal});
+      if (name === null || signal.aborted) return;
+      await execute('keep-both', {path: item.path.slice(1), name, expectedRevision: item.version});
+      // The selected conflict row may disappear. Keep keyboard focus in Files.
+      conflictFocus.current?.focus({preventScroll: true});
+    });
+  }
+  const conflictFocus = useRef(null);
   function uploadFiles(selected, directory) {
     if (!selected.length) { setMessage('No files selected.'); return; }
     void task(async () => {
@@ -278,6 +327,12 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
         await execute('list');
         if (!signal.aborted) await onRefresh?.();
       })}, 'Refresh')),
+    conflicts.length > 0 && h('section', {className: 'webos-files-conflicts', 'aria-label': 'Sync conflicts'},
+      h('strong', null, 'Sync conflicts'),
+      h('ul', null, conflicts.map(item => h('li', {key: item.path},
+        h('span', null, item.name),
+        h('button', {type: 'button', disabled: state.busy || pending, 'aria-label': 'Keep both versions of ' + item.name,
+          onClick: () => keepBoth(item)}, 'Keep both'))))),
     h('input', {type: 'file', multiple: true, hidden: true, ref: upload, 'aria-label': 'Upload account files'}),
     h('div', {className: 'webos-files-browser', 'aria-busy': state.busy || pending, onKeyDownCapture: openFocusedItem},
       dropActive && h('div', {className: 'webos-files-drop-overlay', 'aria-hidden': true}, 'Drop files to upload to ' + (state.directory || 'My files')),
@@ -287,18 +342,21 @@ function FilesView({controller, execute, signal, downloads, onRefresh, openChoic
         h('div', {className: 'webos-files-toolbar'}, h(FileToolbar, {layout: 'inline'}, h('button', {type: 'button', className: 'webos-files-upload', disabled: state.busy || pending, onClick: beginUpload},
           h(ChonkyIconFA, {icon: ChonkyIconName.upload}), 'Upload'))),
         h(FileList), h(FileContextMenu))),
-    h('div', {className: 'webos-files-status', role: 'status'}, status));
+    h('div', {className: 'webos-files-status', role: 'status', tabIndex: -1, ref: conflictFocus}, status));
 }
 
-export function mount({files, instanceId, sessionId, authority, authorize, openFile, activateFile, signal: parentSignal, onRefresh, openChoices = () => [], pickMoveFolder}) {
-  const controller = createFilesController({files, instanceId, sessionId, authorize, openFile, activateFile}), element = document.createElement('div');
-  element.className = 'webos-files'; const root = createRoot(element), abort = new AbortController(), downloads = new Map(); let disposed = false;
+export function mount({files, instanceId, sessionId, authority, authorize, openFile, activateFile, signal: parentSignal, onRefresh, openChoices = () => [], pickMoveFolder, openConflictMirror}) {
+  const abort = new AbortController(), downloads = new Map(), element = document.createElement('div');
+  const controller = createFilesController({files, instanceId, sessionId, authorize, openFile, activateFile, openConflictMirror, signal: abort.signal});
+  element.className = 'webos-files';
+  const root = createRoot(element);
+  let disposed = false;
   const execute = (operation, args = {}) => controller.execute({instanceId, sessionId, operation, args}, authority);
   function dispose() { if (disposed) return; disposed = true; parentSignal?.removeEventListener('abort', dispose); abort.abort(); root.unmount(); controller.dispose(); for (const [url, timer] of downloads) { clearTimeout(timer); URL.revokeObjectURL(url); } downloads.clear(); element.remove(); }
   if (parentSignal?.aborted) { dispose(); throw new DOMException('Files startup cancelled.', 'AbortError'); }
   parentSignal?.addEventListener('abort', dispose, {once: true});
   const darkMode = getComputedStyle(document.documentElement).colorScheme === 'dark';
-  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh, openChoices, pickMoveFolder,
+  root.render(h(FilesView, {controller, execute, signal: abort.signal, downloads, onRefresh, openChoices, pickMoveFolder, openConflictMirror,
     temporary: files.temporary === true, darkMode}));
   const ready = execute('list'); ready.catch(() => {});
   return Object.freeze({element, dispose, ready, inspect: controller.inspect, execute, requestClose: () => !controller.inspect().busy});
